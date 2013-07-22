@@ -14,7 +14,6 @@ using ServiceStack.OrmLite;
 using ServiceStack.OrmLite.SqlServer;
 using SqlMapper.Linq2Sql;
 using SqlMapper.NHibernate;
-using Dapper.Contrib.Extensions;
 
 namespace SqlMapper
 {
@@ -129,14 +128,6 @@ namespace SqlMapper
             var mapperConnection2 = Program.GetOpenConnection();
             tests.Add(id => mapperConnection2.Query("select * from Posts where Id = @Id", new { Id = id }, buffered: true).First(), "Dynamic Mapper Query (buffered)");
             tests.Add(id => mapperConnection2.Query("select * from Posts where Id = @Id", new { Id = id }, buffered: false).First(), "Dynamic Mapper Query (non-buffered)");
-
-            // dapper.contrib
-            var mapperConnection3 = Program.GetOpenConnection();
-            tests.Add(id => mapperConnection2.Get<Post>(id), "Dapper.Cotrib");
-
-            var massiveModel = new DynamicModel(Program.connectionString);
-            var massiveConnection = Program.GetOpenConnection();
-            tests.Add(id => massiveModel.Query("select * from Posts where Id = @0", massiveConnection, id).First(), "Dynamic Massive ORM Query");
 
 			// PetaPoco test with all default options
 			var petapoco = new PetaPoco.Database(Program.connectionString, "System.Data.SqlClient");

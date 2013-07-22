@@ -245,10 +245,6 @@
       <Project>{0fff5bc7-0a4b-4d87-835e-4fad70937507}</Project>
       <Name>Dapper NET45</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Dapper.Contrib\Dapper.Contrib.csproj">
-      <Project>{C2FC4DF5-C8D1-4EA8-8E0C-85A3793EB0BB}</Project>
-      <Name>Dapper.Contrib</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
