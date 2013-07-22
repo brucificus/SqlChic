@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -34,7 +35,7 @@ namespace Dapper
             /// </summary>
             /// <param name="command">The raw command prior to execution</param>
             /// <param name="identity">Information about the query</param>
-            void AddParameters(IDbCommand command, Identity identity);
+            void AddParameters(DbCommand command, Identity identity);
         }
 
         /// <summary>
@@ -47,7 +48,7 @@ namespace Dapper
             /// </summary>
             /// <param name="command">The raw command prior to execution</param>
             /// <param name="name">Parameter name</param>
-            void AddParameter(IDbCommand command, string name);
+            void AddParameter(DbCommand command, string name);
         }
 
         /// <summary>
@@ -110,12 +111,12 @@ namespace Dapper
             ParameterInfo Parameter { get; }
         }
 
-        static Link<Type, Action<IDbCommand, bool>> bindByNameCache;
-        static Action<IDbCommand, bool> GetBindByName(Type commandType)
+        static Link<Type, Action<DbCommand, bool>> bindByNameCache;
+        static Action<DbCommand, bool> GetBindByName(Type commandType)
         {
             if (commandType == null) return null; // GIGO
-            Action<IDbCommand, bool> action;
-            if (Link<Type, Action<IDbCommand, bool>>.TryGet(bindByNameCache, commandType, out action))
+            Action<DbCommand, bool> action;
+            if (Link<Type, Action<DbCommand, bool>>.TryGet(bindByNameCache, commandType, out action))
             {
                 return action;
             }
@@ -128,17 +129,17 @@ namespace Dapper
                 && (setter = prop.GetSetMethod()) != null
                 )
             {
-                var method = new DynamicMethod(commandType.Name + "_BindByName", null, new Type[] { typeof(IDbCommand), typeof(bool) });
+                var method = new DynamicMethod(commandType.Name + "_BindByName", null, new Type[] { typeof(DbCommand), typeof(bool) });
                 var il = method.GetILGenerator();
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Castclass, commandType);
                 il.Emit(OpCodes.Ldarg_1);
                 il.EmitCall(OpCodes.Callvirt, setter, null);
                 il.Emit(OpCodes.Ret);
-                action = (Action<IDbCommand, bool>)method.CreateDelegate(typeof(Action<IDbCommand, bool>));
+                action = (Action<DbCommand, bool>)method.CreateDelegate(typeof(Action<DbCommand, bool>));
             }
             // cache it            
-            Link<Type, Action<IDbCommand, bool>>.TryAdd(ref bindByNameCache, commandType, ref action);
+            Link<Type, Action<DbCommand, bool>>.TryAdd(ref bindByNameCache, commandType, ref action);
             return action;
         }
         /// <summary>
@@ -193,13 +194,13 @@ namespace Dapper
         partial class CacheInfo
         {
             public DeserializerState Deserializer { get; set; }
-            public Func<IDataReader, object>[] OtherDeserializers { get; set; }
-            public Action<IDbCommand, object> ParamReader { get; set; }
+            public Func<DbDataReader, object>[] OtherDeserializers { get; set; }
+            public Action<DbCommand, object> ParamReader { get; set; }
             private int hitCount;
             public int GetHitCount() { return Interlocked.CompareExchange(ref hitCount, 0, 0); }
             public void RecordHit() { Interlocked.Increment(ref hitCount); }
         }
-        static int GetColumnHash(IDataReader reader)
+        static int GetColumnHash(DbDataReader reader)
         {
             unchecked
             {
@@ -215,9 +216,9 @@ namespace Dapper
         struct DeserializerState
         {
             public readonly int Hash;
-            public readonly Func<IDataReader, object> Func;
+            public readonly Func<DbDataReader, object> Func;
 
-            public DeserializerState(int hash, Func<IDataReader, object> func)
+            public DeserializerState(int hash, Func<DbDataReader, object> func)
             {
                 Hash = hash;
                 Func = func;
@@ -446,7 +447,7 @@ namespace Dapper
                 return new Identity(sql, commandType, connectionString, this.type, type, null, -1);
             }
 
-            internal Identity(string sql, CommandType? commandType, IDbConnection connection, Type type, Type parametersType, Type[] otherTypes)
+            internal Identity(string sql, CommandType? commandType, DbConnection connection, Type type, Type parametersType, Type[] otherTypes)
                 : this(sql, commandType, connection.ConnectionString, type, parametersType, otherTypes, 0)
             { }
             private Identity(string sql, CommandType? commandType, string connectionString, Type type, Type parametersType, Type[] otherTypes, int gridIndex)
@@ -541,7 +542,7 @@ namespace Dapper
         /// </summary>
         /// <returns>Number of rows affected</returns>
         public static int Execute(
-this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
+this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
 )
         {
             IEnumerable multiExec = (object)param as IEnumerable;
@@ -587,7 +588,7 @@ this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transac
         /// <summary>
         /// Return a list of dynamic objects, reader is closed after the call
         /// </summary>
-        public static IEnumerable<dynamic> Query(this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, int? commandTimeout = null, CommandType? commandType = null)
+        public static IEnumerable<dynamic> Query(this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, bool buffered = true, int? commandTimeout = null, CommandType? commandType = null)
         {
             return Query<DapperRow>(cnn, sql, param as object, transaction, buffered, commandTimeout, commandType);
         }
@@ -600,7 +601,7 @@ this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transac
         /// created per row, and a direct column-name===member-name mapping is assumed (case insensitive).
         /// </returns>
         public static IEnumerable<T> Query<T>(
-this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, int? commandTimeout = null, CommandType? commandType = null
+this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, bool buffered = true, int? commandTimeout = null, CommandType? commandType = null
 )
         {
             var data = QueryInternal<T>(cnn, sql, param as object, transaction, commandTimeout, commandType);
@@ -611,14 +612,14 @@ this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transac
         /// Execute a command that returns multiple result sets, and access each in turn
         /// </summary>
         public static GridReader QueryMultiple(
-            this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
+            this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
 )
         {
             Identity identity = new Identity(sql, commandType, cnn, typeof(GridReader), (object)param == null ? null : ((object)param).GetType(), null);
             CacheInfo info = GetCacheInfo(identity);
 
-            IDbCommand cmd = null;
-            IDataReader reader = null;
+            DbCommand cmd = null;
+            DbDataReader reader = null;
             bool wasClosed = cnn.State == ConnectionState.Closed;
             try
             {
@@ -650,13 +651,13 @@ this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transac
         /// <summary>
         /// Return a typed list of objects, reader is closed after the call
         /// </summary>
-        private static IEnumerable<T> QueryInternal<T>(this IDbConnection cnn, string sql, object param, IDbTransaction transaction, int? commandTimeout, CommandType? commandType)
+        private static IEnumerable<T> QueryInternal<T>(this DbConnection cnn, string sql, object param, DbTransaction transaction, int? commandTimeout, CommandType? commandType)
         {
             var identity = new Identity(sql, commandType, cnn, typeof(T), param == null ? null : param.GetType(), null);
             var info = GetCacheInfo(identity);
 
-            IDbCommand cmd = null;
-            IDataReader reader = null;
+            DbCommand cmd = null;
+            DbDataReader reader = null;
 
             bool wasClosed = cnn.State == ConnectionState.Closed;
             try
@@ -718,7 +719,7 @@ this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transac
         /// <param name="commandType">Is it a stored proc or a batch?</param>
         /// <returns></returns>
         public static IEnumerable<TReturn> Query<TFirst, TSecond, TReturn>(
-this IDbConnection cnn, string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+this DbConnection cnn, string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
             return MultiMap<TFirst, TSecond, DontMap, DontMap, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
@@ -742,7 +743,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TReturn> map, dynamic 
         /// <param name="commandType"></param>
         /// <returns></returns>
         public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(
-this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
             return MultiMap<TFirst, TSecond, TThird, DontMap, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
@@ -767,7 +768,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TReturn> map, 
         /// <param name="commandType"></param>
         /// <returns></returns>
         public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(
-this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
             return MultiMap<TFirst, TSecond, TThird, TFourth, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
@@ -793,7 +794,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// <param name="commandType"></param>
         /// <returns></returns>
         public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(
-            this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+            this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
             return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
@@ -820,7 +821,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// <param name="commandType"></param>
         /// <returns></returns>
         public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(
-            this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+            this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
             return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
@@ -848,27 +849,27 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// <param name="commandTimeout"></param>
         /// <param name="commandType"></param>
         /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null)
+        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null)
         {
             return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
         }
 
         partial class DontMap { }
         static IEnumerable<TReturn> MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(
-            this IDbConnection cnn, string sql, object map, object param, IDbTransaction transaction, bool buffered, string splitOn, int? commandTimeout, CommandType? commandType)
+            this DbConnection cnn, string sql, object map, object param, DbTransaction transaction, bool buffered, string splitOn, int? commandTimeout, CommandType? commandType)
         {
             var results = MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(cnn, sql, map, param, transaction, splitOn, commandTimeout, commandType, null, null);
             return buffered ? results.ToList() : results;
         }
 
          
-        static IEnumerable<TReturn> MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this IDbConnection cnn, string sql, object map, object param, IDbTransaction transaction, string splitOn, int? commandTimeout, CommandType? commandType, IDataReader reader, Identity identity)
+        static IEnumerable<TReturn> MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this DbConnection cnn, string sql, object map, object param, DbTransaction transaction, string splitOn, int? commandTimeout, CommandType? commandType, DbDataReader reader, Identity identity)
         {
             identity = identity ?? new Identity(sql, commandType, cnn, typeof(TFirst), (object)param == null ? null : ((object)param).GetType(), new[] { typeof(TFirst), typeof(TSecond), typeof(TThird), typeof(TFourth), typeof(TFifth), typeof(TSixth), typeof(TSeventh) });
             CacheInfo cinfo = GetCacheInfo(identity);
 
-            IDbCommand ownedCommand = null;
-            IDataReader ownedReader = null;
+            DbCommand ownedCommand = null;
+            DbDataReader ownedReader = null;
 
             bool wasClosed = cnn != null && cnn.State == ConnectionState.Closed;
             try
@@ -881,7 +882,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
                     reader = ownedReader;
                 }
                 DeserializerState deserializer = default(DeserializerState);
-                Func<IDataReader, object>[] otherDeserializers = null;
+                Func<DbDataReader, object>[] otherDeserializers = null;
 
                 int hash = GetColumnHash(reader);
                 if ((deserializer = cinfo.Deserializer).Func == null || (otherDeserializers = cinfo.OtherDeserializers) == null || hash != deserializer.Hash)
@@ -892,7 +893,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
                     SetQueryCache(identity, cinfo);
                 }
 
-                Func<IDataReader, TReturn> mapIt = GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(deserializer.Func, otherDeserializers, map);
+                Func<DbDataReader, TReturn> mapIt = GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(deserializer.Func, otherDeserializers, map);
 
                 if (mapIt != null)
                 {
@@ -922,7 +923,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             }
         }
 
-        private static Func<IDataReader, TReturn> GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(Func<IDataReader, object> deserializer, Func<IDataReader, object>[] otherDeserializers, object map)
+        private static Func<DbDataReader, TReturn> GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(Func<DbDataReader, object> deserializer, Func<DbDataReader, object>[] otherDeserializers, object map)
         {
             switch (otherDeserializers.Length)
             {
@@ -943,7 +944,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             }
         }
 
-        private static Func<IDataReader, object>[] GenerateDeserializers(Type[] types, string splitOn, IDataReader reader)
+        private static Func<DbDataReader, object>[] GenerateDeserializers(Type[] types, string splitOn, DbDataReader reader)
         {
             int current = 0;
             var splits = splitOn.Split(',').ToArray();
@@ -1001,7 +1002,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
                 return pos;
             };
 
-            var deserializers = new List<Func<IDataReader, object>>();
+            var deserializers = new List<Func<DbDataReader, object>>();
             int split = 0;
             bool first = true;
             foreach (var type in types)
@@ -1048,7 +1049,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             return info;
         }
 
-        private static Func<IDataReader, object> GetDeserializer(Type type, IDataReader reader, int startBound, int length, bool returnNullIfFirstMissing)
+        private static Func<DbDataReader, object> GetDeserializer(Type type, DbDataReader reader, int startBound, int length, bool returnNullIfFirstMissing)
         {
             // dynamic is passed in as Object ... by c# design
             if (type == typeof(object)
@@ -1395,7 +1396,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             #endregion
         }
 
-		internal static Func<IDataReader, object> GetDapperRowDeserializer(IDataRecord reader, int startBound, int length, bool returnNullIfFirstMissing)
+		internal static Func<DbDataReader, object> GetDapperRowDeserializer(IDataRecord reader, int startBound, int length, bool returnNullIfFirstMissing)
         {
             var fieldCount = reader.FieldCount;
             if (length == -1)
@@ -1489,7 +1490,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// </summary>
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("This method is for internal usage only", true)]
-        public static IDbDataParameter FindOrAddParameter(IDataParameterCollection parameters, IDbCommand command, string name)
+        public static IDbDataParameter FindOrAddParameter(IDataParameterCollection parameters, DbCommand command, string name)
         {
             IDbDataParameter result;
             if (parameters.Contains(name))
@@ -1510,7 +1511,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// </summary>
         [Browsable(false), EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("This method is for internal usage only", false)]
-        public static void PackListParameters(IDbCommand command, string namePrefix, object value)
+        public static void PackListParameters(DbCommand command, string namePrefix, object value)
         {
             // initially we tried TVP, however it performs quite poorly.
             // keep in mind SQL support up to 2000 params easily in sp_executesql, needing more is rare
@@ -1586,11 +1587,11 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// <summary>
         /// Internal use only
         /// </summary>
-        public static Action<IDbCommand, object> CreateParamInfoGenerator(Identity identity, bool checkForDuplicates)
+        public static Action<DbCommand, object> CreateParamInfoGenerator(Identity identity, bool checkForDuplicates)
         {
             Type type = identity.parametersType;
             bool filterParams = identity.commandType.GetValueOrDefault(CommandType.Text) == CommandType.Text;
-            var dm = new DynamicMethod(string.Format("ParamInfo{0}", Guid.NewGuid()), null, new[] { typeof(IDbCommand), typeof(object) }, type, true);
+            var dm = new DynamicMethod(string.Format("ParamInfo{0}", Guid.NewGuid()), null, new[] { typeof(DbCommand), typeof(object) }, type, true);
 
             var il = dm.GetILGenerator();
 
@@ -1601,7 +1602,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             il.Emit(OpCodes.Stloc_0);// stack is now empty
 
             il.Emit(OpCodes.Ldarg_0); // stack is now [command]
-            il.EmitCall(OpCodes.Callvirt, typeof(IDbCommand).GetProperty("Parameters").GetGetMethod(), null); // stack is now [parameters]
+            il.EmitCall(OpCodes.Callvirt, typeof(DbCommand).GetProperty("Parameters").GetGetMethod(), null); // stack is now [parameters]
 
             IEnumerable<PropertyInfo> props = type.GetProperties().Where(p => p.GetIndexParameters().Length == 0).OrderBy(p => p.Name);
             if (filterParams)
@@ -1655,7 +1656,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
                 else
                 {
                     // no risk of duplicates; just blindly add
-                    il.EmitCall(OpCodes.Callvirt, typeof(IDbCommand).GetMethod("CreateParameter"), null);// stack is now [parameters] [parameters] [parameter]
+                    il.EmitCall(OpCodes.Callvirt, typeof(DbCommand).GetMethod("CreateParameter"), null);// stack is now [parameters] [parameters] [parameter]
 
                     il.Emit(OpCodes.Dup);// stack is now [parameters] [parameters] [parameter] [parameter]
                     il.Emit(OpCodes.Ldstr, prop.Name); // stack is now [parameters] [parameters] [parameter] [parameter] [name]
@@ -1760,10 +1761,10 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             // stack is currently [parameters]
             il.Emit(OpCodes.Pop); // stack is now empty
             il.Emit(OpCodes.Ret);
-            return (Action<IDbCommand, object>)dm.CreateDelegate(typeof(Action<IDbCommand, object>));
+            return (Action<DbCommand, object>)dm.CreateDelegate(typeof(Action<DbCommand, object>));
         }
 
-        private static IDbCommand SetupCommand(IDbConnection cnn, IDbTransaction transaction, string sql, Action<IDbCommand, object> paramReader, object obj, int? commandTimeout, CommandType? commandType)
+        private static DbCommand SetupCommand(DbConnection cnn, DbTransaction transaction, string sql, Action<DbCommand, object> paramReader, object obj, int? commandTimeout, CommandType? commandType)
         {
             var cmd = cnn.CreateCommand();
             var bindByName = GetBindByName(cmd.GetType());
@@ -1783,9 +1784,9 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         }
 
 
-        private static int ExecuteCommand(IDbConnection cnn, IDbTransaction transaction, string sql, Action<IDbCommand, object> paramReader, object obj, int? commandTimeout, CommandType? commandType)
+        private static int ExecuteCommand(DbConnection cnn, DbTransaction transaction, string sql, Action<DbCommand, object> paramReader, object obj, int? commandTimeout, CommandType? commandType)
         {
-            IDbCommand cmd = null;
+            DbCommand cmd = null;
             bool wasClosed = cnn.State == ConnectionState.Closed;
             try
             {
@@ -1800,7 +1801,7 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
             }
         }
 
-        private static Func<IDataReader, object> GetStructDeserializer(Type type, Type effectiveType, int index)
+        private static Func<DbDataReader, object> GetStructDeserializer(Type type, Type effectiveType, int index)
         {
             // no point using special per-type handling here; it boils down to the same, plus not all are supported anyway (see: SqlDataReader.GetChar - not supported!)
 #pragma warning disable 618
@@ -1903,12 +1904,12 @@ this IDbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetu
         /// <param name="length"></param>
         /// <param name="returnNullIfFirstMissing"></param>
         /// <returns></returns>
-        public static Func<IDataReader, object> GetTypeDeserializer(
-Type type, IDataReader reader, int startBound = 0, int length = -1, bool returnNullIfFirstMissing = false
+        public static Func<DbDataReader, object> GetTypeDeserializer(
+Type type, DbDataReader reader, int startBound = 0, int length = -1, bool returnNullIfFirstMissing = false
 )
         {
 
-            var dm = new DynamicMethod(string.Format("Deserialize{0}", Guid.NewGuid()), typeof(object), new[] { typeof(IDataReader) }, true);
+            var dm = new DynamicMethod(string.Format("Deserialize{0}", Guid.NewGuid()), typeof(object), new[] { typeof(DbDataReader) }, true);
             var il = dm.GetILGenerator();
             il.DeclareLocal(typeof(int));
             il.DeclareLocal(type);
@@ -2213,7 +2214,7 @@ Type type, IDataReader reader, int startBound = 0, int length = -1, bool returnN
             }
             il.Emit(OpCodes.Ret);
 
-            return (Func<IDataReader, object>)dm.CreateDelegate(typeof(Func<IDataReader, object>));
+            return (Func<DbDataReader, object>)dm.CreateDelegate(typeof(Func<DbDataReader, object>));
         }
 
         private static void LoadLocal(ILGenerator il, int index)
@@ -2277,7 +2278,7 @@ Type type, IDataReader reader, int startBound = 0, int length = -1, bool returnN
         /// <param name="ex"></param>
         /// <param name="index"></param>
         /// <param name="reader"></param>
-        public static void ThrowDataException(Exception ex, int index, IDataReader reader)
+        public static void ThrowDataException(Exception ex, int index, DbDataReader reader)
         {
             Exception toThrow;
             try
@@ -2350,11 +2351,11 @@ Type type, IDataReader reader, int startBound = 0, int length = -1, bool returnN
         /// </summary>
         public partial class GridReader : IDisposable
         {
-            private IDataReader reader;
-            private IDbCommand command;
+            private DbDataReader reader;
+            private DbCommand command;
             private Identity identity;
 
-            internal GridReader(IDbCommand command, IDataReader reader, Identity identity)
+            internal GridReader(DbCommand command, DbDataReader reader, Identity identity)
             {
                 this.command = command;
                 this.reader = reader;
@@ -2467,7 +2468,7 @@ Type type, IDataReader reader, int startBound = 0, int length = -1, bool returnN
                 return buffered ? result.ToList() : result;
             }
 
-            private IEnumerable<T> ReadDeferred<T>(int index, Func<IDataReader, object> deserializer, Identity typedIdentity)
+            private IEnumerable<T> ReadDeferred<T>(int index, Func<DbDataReader, object> deserializer, Identity typedIdentity)
             {
                 try
                 {
@@ -2531,7 +2532,7 @@ Type type, IDataReader reader, int startBound = 0, int length = -1, bool returnN
     partial class DynamicParameters : SqlMapper.IDynamicParameters
     {
         internal const DbType EnumerableMultiParameter = (DbType)(-1);
-        static Dictionary<SqlMapper.Identity, Action<IDbCommand, object>> paramReaderCache = new Dictionary<SqlMapper.Identity, Action<IDbCommand, object>>();
+        static Dictionary<SqlMapper.Identity, Action<DbCommand, object>> paramReaderCache = new Dictionary<SqlMapper.Identity, Action<DbCommand, object>>();
 
         Dictionary<string, ParamInfo> parameters = new Dictionary<string, ParamInfo>();
         List<object> templates;
@@ -2641,7 +2642,7 @@ string name, object value = null, DbType? dbType = null, ParameterDirection? dir
             return name;
         }
 
-        void SqlMapper.IDynamicParameters.AddParameters(IDbCommand command, SqlMapper.Identity identity)
+        void SqlMapper.IDynamicParameters.AddParameters(DbCommand command, SqlMapper.Identity identity)
         {
             AddParameters(command, identity);
         }
@@ -2651,14 +2652,14 @@ string name, object value = null, DbType? dbType = null, ParameterDirection? dir
         /// </summary>
         /// <param name="command">The raw command prior to execution</param>
         /// <param name="identity">Information about the query</param>
-        protected void AddParameters(IDbCommand command, SqlMapper.Identity identity)
+        protected void AddParameters(DbCommand command, SqlMapper.Identity identity)
         {
             if (templates != null)
             {
                 foreach (var template in templates)
                 {
                     var newIdent = identity.ForDynamicParameters(template.GetType());
-                    Action<IDbCommand, object> appender;
+                    Action<DbCommand, object> appender;
 
                     lock (paramReaderCache)
                     {
@@ -2793,7 +2794,7 @@ string name, object value = null, DbType? dbType = null, ParameterDirection? dir
         /// </summary>
         /// <param name="command"></param>
         /// <param name="name"></param>
-        public void AddParameter(IDbCommand command, string name)
+        public void AddParameter(DbCommand command, string name)
         {
             if (IsFixedLength && Length == -1)
             {
@@ -2831,7 +2832,7 @@ string name, object value = null, DbType? dbType = null, ParameterDirection? dir
         /// <summary>
         /// Gets the featureset based on the passed connection
         /// </summary>
-        public static FeatureSupport Get(IDbConnection connection)
+        public static FeatureSupport Get(DbConnection connection)
         {
             string name = connection.GetType().Name;
             FeatureSupport features;

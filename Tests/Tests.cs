@@ -1,6 +1,7 @@
 ﻿//#define POSTGRESQL // uncomment to run postgres tests
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
 using Dapper;
@@ -1252,7 +1253,7 @@ end");
                 this.numbers = numbers;
             }
 
-            public void AddParameters(IDbCommand command, Dapper.SqlMapper.Identity identity)
+            public void AddParameters(DbCommand command, Dapper.SqlMapper.Identity identity)
             {
                 var sqlCommand = (SqlCommand)command;
                 sqlCommand.CommandType = CommandType.StoredProcedure;
@@ -1315,7 +1316,7 @@ end");
                 this.numbers = numbers;
             }
 
-            public new void AddParameters(IDbCommand command, Dapper.SqlMapper.Identity identity)
+            public new void AddParameters(DbCommand command, Dapper.SqlMapper.Identity identity)
             {
                 base.AddParameters(command, identity);
 
@@ -1386,7 +1387,7 @@ end");
                 this.numbers = numbers;
             }
 
-            public void AddParameter(IDbCommand command, string name)
+            public void AddParameter(DbCommand command, string name)
             {
                 var sqlCommand = (SqlCommand)command;
                 sqlCommand.CommandType = CommandType.StoredProcedure;
@@ -1998,29 +1999,6 @@ Order by p.Id";
             }
         }
 
-        public void TestCommandWithInheritedTransaction()
-        {
-            connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
-
-            try
-            {
-                using (var transaction = connection.BeginTransaction())
-                {
-                    var transactedConnection = new TransactedConnection(connection, transaction);
-
-                    transactedConnection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');");
-
-                    transaction.Rollback();
-                }
-
-                connection.Query<int>("select count(*) from #TransactionTest;").Single().IsEqualTo(0);
-            }
-            finally
-            {
-                connection.Execute("drop table #TransactionTest;");
-            }
-        }
-
         public void TestReaderWhenResultsChange()
         {
             try
@@ -2371,61 +2349,6 @@ end");
             result.IsEqualTo(0); // zero rows; default of int over zero rows is zero
 
 
-        }
-
-        class TransactedConnection : IDbConnection
-        {
-            IDbConnection _conn;
-            IDbTransaction _tran;
-
-            public TransactedConnection(IDbConnection conn, IDbTransaction tran)
-            {
-                _conn = conn;
-                _tran = tran;
-            }
-
-            public string ConnectionString { get { return _conn.ConnectionString; } set { _conn.ConnectionString = value; } }
-            public int ConnectionTimeout { get { return _conn.ConnectionTimeout; } }
-            public string Database { get { return _conn.Database; } }
-            public ConnectionState State { get { return _conn.State; } }
-
-            public IDbTransaction BeginTransaction(IsolationLevel il)
-            {
-                throw new NotImplementedException();
-            }
-
-            public IDbTransaction BeginTransaction()
-            {
-                return _tran;
-            }
-
-            public void ChangeDatabase(string databaseName)
-            {
-                _conn.ChangeDatabase(databaseName);
-            }
-
-            public void Close()
-            {
-                _conn.Close();
-            }
-
-            public IDbCommand CreateCommand()
-            {
-                // The command inherits the "current" transaction.
-                var command = _conn.CreateCommand();
-                command.Transaction = _tran;
-                return command;
-            }
-
-            public void Dispose()
-            {
-                _conn.Dispose();
-            }
-
-            public void Open()
-            {
-                _conn.Open();
-            }
         }
 
 		public void TestDapperTableMetadataRetrieval()
