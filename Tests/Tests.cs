@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Threading.Tasks;
 using Dapper;
 using System.Data.SqlServerCe;
 using System.IO;
@@ -733,7 +734,7 @@ Order by p.Id";
 
 
 
-        public void TestMultiMapGridReader()
+        public async Task TestMultiMapGridReaderAsync()
         {
             var createSql = @"
                 create table #Users (Id int, Name varchar(20))
@@ -758,7 +759,7 @@ left join #Users u on u.Id = p.OwnerId
 Order by p.Id
 ";
 
-            var grid = connection.QueryMultiple(sql);
+            var grid = await connection.QueryMultipleAsync(sql);
 
             for (int i = 0; i < 2; i++)
             {
@@ -777,9 +778,9 @@ Order by p.Id
 
         }
 
-        public void TestQueryMultipleBuffered()
+        public async Task TestQueryMultipleAsyncBuffered()
         {
-            using (var grid = connection.QueryMultiple("select 1; select 2; select @x; select 4", new { x = 3 }))
+            using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
             {
                 var a = grid.Read<int>();
                 var b = grid.Read<int>();
@@ -793,9 +794,9 @@ Order by p.Id
             }
         }
 
-        public void TestQueryMultipleNonBufferedIncorrectOrder()
+        public async Task TestQueryMultipleAsyncNonBufferedIncorrectOrder()
         {
-            using (var grid = connection.QueryMultiple("select 1; select 2; select @x; select 4", new { x = 3 }))
+            using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
             {
                 var a = grid.Read<int>(false);
                 try
@@ -810,9 +811,9 @@ Order by p.Id
                 
             }
         }
-        public void TestQueryMultipleNonBufferedCcorrectOrder()
+        public async Task TestQueryMultipleAsyncNonBufferedCcorrectOrder()
         {
-            using (var grid = connection.QueryMultiple("select 1; select 2; select @x; select 4", new { x = 3 }))
+            using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
             {
                 var a = grid.Read<int>(false).Single();
                 var b = grid.Read<int>(false).Single();
@@ -945,12 +946,12 @@ Order by p.Id";
             }
         }
 
-        public void TestMultiReaderBasic()
+        public async Task TestMultiReaderBasicAsync()
         {
             var sql = @"select 1 as Id union all select 2 as Id     select 'abc' as name   select 1 as Id union all select 2 as Id";
             int i, j;
             string s;
-            using (var multi = connection.QueryMultiple(sql))
+            using (var multi = await connection.QueryMultipleAsync(sql))
             {
                 i = multi.Read<int>().First();
                 s = multi.Read<string>().Single();
@@ -1576,7 +1577,7 @@ end");
         }
 
 
-        public void TestMultiMapThreeTypesWithGridReader()
+        public async Task TestMultiMapThreeTypesWithGridReaderAsync()
         {
             var createSql = @"
                 create table #Users (Id int, Name varchar(20))
@@ -1601,7 +1602,7 @@ left join #Comments c on c.postId = p.Id
 where p.Id = 1
 Order by p.Id";
 
-            var grid = connection.QueryMultiple(sql);
+            var grid = await connection.QueryMultipleAsync(sql);
 
             var post1 = grid.Read<Post>().ToList();
 
@@ -1614,7 +1615,7 @@ Order by p.Id";
             connection.Execute("drop table #Users drop table #Posts drop table #Comments");
         }
 
-        public void TestReadDynamicWithGridReader()
+        public async Task TestReadDynamicWithGridReaderAsync()
         {
             var createSql = @"
                 create table #Users (Id int, Name varchar(20))
@@ -1632,7 +1633,7 @@ Order by p.Id";
             var sql = @"SELECT * FROM #Users ORDER BY Id
                         SELECT * FROM #Posts ORDER BY Id DESC";
 
-            var grid = connection.QueryMultiple(sql);
+            var grid = await connection.QueryMultipleAsync(sql);
 
             var users = grid.Read().ToList();
             var posts = grid.Read().ToList();
@@ -2182,12 +2183,12 @@ end");
                 i.IsEqualTo(5);
             }
         }
-        public void QueryMultiple2FromClosed()
+        public async Task QueryMultipleAsync2FromClosed()
         {
             using (var conn = GetClosedConnection())
             {
                 conn.State.IsEqualTo(ConnectionState.Closed);
-                using (var multi = conn.QueryMultiple("select 1 select 2 select 3"))
+                using (var multi = await conn.QueryMultipleAsync("select 1 select 2 select 3"))
                 {
                     multi.Read<int>().Single().IsEqualTo(1);
                     multi.Read<int>().Single().IsEqualTo(2);
@@ -2235,11 +2236,11 @@ end");
                 }
             }
         }
-        public void QueryMultipleFromClosed()
+        public async Task QueryMultipleAsyncFromClosed()
         {
             using (var conn = GetClosedConnection())
             {
-                using (var multi = conn.QueryMultiple("select 1; select 'abc';"))
+                using (var multi = await conn.QueryMultipleAsync("select 1; select 'abc';"))
                 {
                     multi.Read<int>().Single().IsEqualTo(1);
                     multi.Read<string>().Single().IsEqualTo("abc");
@@ -2247,13 +2248,13 @@ end");
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
-        public void QueryMultipleInvalidFromClosed()
+        public async Task QueryMultipleAsyncInvalidFromClosed()
         {
             using (var conn = GetClosedConnection())
             {
                 try
                 {
-                    conn.QueryMultiple("select gibberish");
+                    await conn.QueryMultipleAsync("select gibberish");
                     false.IsEqualTo(true); // shouldn't have got here
                 }
                 catch
@@ -2263,9 +2264,9 @@ end");
             }
         }
 
-        public void TestMultiSelectWithSomeEmptyGrids()
+        public async Task TestMultiSelectAsyncWithSomeEmptyGrids()
         {
-            using (var reader = connection.QueryMultiple("select 1; select 2 where 1 = 0; select 3 where 1 = 0; select 4;"))
+            using (var reader = await connection.QueryMultipleAsync("select 1; select 2 where 1 = 0; select 3 where 1 = 0; select 4;"))
             {
                 var one = reader.Read<int>().ToArray();
                 var two = reader.Read<int>().ToArray();

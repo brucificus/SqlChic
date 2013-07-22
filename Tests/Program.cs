@@ -2,6 +2,8 @@
 using System.Data.SqlClient;
 using System.Reflection;
 using System.Linq;
+using System.Threading.Tasks;
+
 namespace SqlMapper
 {
     [ServiceStack.DataAnnotations.Alias("Posts")]
@@ -120,7 +122,11 @@ end
                 Console.Write("Running " + method.Name);
                 try
                 {
-                    method.Invoke(tester, null);
+                    var methodResult = method.Invoke(tester, null);
+					if (methodResult is Task)
+					{
+						((Task) methodResult).Wait();
+					}
                     Console.WriteLine(" - OK!");
                 } catch(TargetInvocationException tie)
                 {

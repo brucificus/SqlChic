@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Web;
 using System.Data;
 using Dapper;
@@ -290,22 +291,22 @@ namespace Dapper
             return SqlMapper.Query<T>(connection, sql, param as object, transaction, buffered, commandTimeout);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TReturn>(string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+        public IEnumerable<TReturn> Query<TFirst, TSecond, TReturn>(string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
             return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
             return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
             return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, IDbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
             return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
         }
@@ -315,9 +316,9 @@ namespace Dapper
             return SqlMapper.Query(connection, sql, param as object, transaction, buffered);
         }
 
-        public Dapper.SqlMapper.GridReader QueryMultiple(string sql, dynamic param = null, IDbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null)
+        public async Task<Dapper.SqlMapper.GridReader> QueryMultipleAsync(string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null)
         {
-            return SqlMapper.QueryMultiple(connection, sql, param, transaction, commandTimeout, commandType);
+            return await SqlMapper.QueryMultipleAsync(connection, sql, param, transaction, commandTimeout, commandType);
         }
 
 

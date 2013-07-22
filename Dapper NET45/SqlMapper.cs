@@ -16,6 +16,7 @@ using System.Text;
 using System.Threading;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 
 namespace Dapper
@@ -611,7 +612,7 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
         /// <summary>
         /// Execute a command that returns multiple result sets, and access each in turn
         /// </summary>
-        public static GridReader QueryMultiple(
+        public static async Task<GridReader> QueryMultipleAsync(
             this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
 )
         {
@@ -625,7 +626,7 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
             {
                 if (wasClosed) cnn.Open();
                 cmd = SetupCommand(cnn, transaction, sql, info.ParamReader, (object)param, commandTimeout, commandType);
-                reader = cmd.ExecuteReader(wasClosed ? CommandBehavior.CloseConnection : CommandBehavior.Default);
+                reader = await cmd.ExecuteReaderAsync(wasClosed ? CommandBehavior.CloseConnection : CommandBehavior.Default);
 
                 var result = new GridReader(cmd, reader, identity);
                 wasClosed = false; // *if* the connection was closed and we got this far, then we now have a reader
