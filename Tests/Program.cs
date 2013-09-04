@@ -120,24 +120,38 @@ end
             foreach (var method in methods)
             {
                 Console.Write("Running " + method.Name);
-                try
-                {
-                    var methodResult = method.Invoke(tester, null);
+				try
+				{
+					var methodResult = method.Invoke(tester, null);
 					if (methodResult is Task)
 					{
 						((Task) methodResult).Wait();
 					}
-                    Console.WriteLine(" - OK!");
-                } catch(TargetInvocationException tie)
-                {
-                    fail++;
-                    Console.WriteLine(" - " + tie.InnerException.Message);
-                    
-                }catch (Exception ex)
-                {
-                    fail++;
-                    Console.WriteLine(" - " + ex.Message);
-                }
+					Console.WriteLine(" - OK!");
+				}
+				catch (TargetInvocationException tie)
+				{
+					fail++;
+					Console.WriteLine(" - " + tie.InnerException.Message);
+
+				}
+				catch (AggregateException ae)
+				{
+					fail++;
+					if (ae.InnerExceptions.Count == 1)
+					{
+						Console.WriteLine(" - " + ae.InnerException.Message);
+					}
+					else
+					{
+						Console.WriteLine(" - " + ae.Message);
+					}
+				}
+				catch (Exception ex)
+				{
+					fail++;
+					Console.WriteLine(" - " + ex.Message);
+				}
             }
             Console.WriteLine();
             if(fail == 0)

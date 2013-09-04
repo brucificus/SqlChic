@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Threading.Tasks;
 
 namespace Dapper.Rainbow
 {
@@ -19,7 +21,7 @@ namespace Dapper.Rainbow
             /// </summary>
             /// <param name="data">Either DynamicParameters or an anonymous type or concrete type</param>
             /// <returns></returns>
-            public override int? Insert(dynamic data)
+            public override async Task<int?> Insert(dynamic data)
             {
                 var o = (object)data;
                 List<string> paramNames = GetParamNames(o);
@@ -29,12 +31,12 @@ namespace Dapper.Rainbow
                 string cols_params = string.Join(",", paramNames.Select(p => "@" + p));
 
                 var sql = "insert " + TableName + " (" + cols + ") values (" + cols_params + ")";
-                if (database.Execute(sql, o) != 1)
+                if (await database.ExecuteAsync(sql, o) != 1)
                 {
                     return null;
                 }
 
-                return (int)database.Query<decimal>("SELECT @@IDENTITY AS LastInsertedId").Single();
+                return (int) (await database.Query<decimal>("SELECT @@IDENTITY AS LastInsertedId").SingleAsync());
             }
         }
 

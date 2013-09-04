@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using System.Data.SqlServerCe;
@@ -24,6 +25,7 @@ namespace SqlMapper
     class Tests
     {
         SqlConnection connection = Program.GetOpenConnection();
+		//private SqlConnection connection { get { return Program.GetOpenConnection(); } }
 
         public class AbstractInheritance
         {
@@ -67,7 +69,7 @@ namespace SqlMapper
             public Comment Comment { get; set; }
         }
 
-        public void TestMultiMapWithConstructor()
+        public async Task TestMultiMapWithConstructorAsync()
         { 
             var createSql = @"
                 create table #Users (Id int, Name varchar(20))
@@ -79,11 +81,11 @@ namespace SqlMapper
                 insert #Posts values(1, 99, 'Sams Post1')
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')";
-            connection.Execute(createSql);
+            await connection.Execute(createSql);
             string sql = @"select * from #Posts p 
                            left join #Users u on u.Id = p.OwnerId 
                            Order by p.Id";
-            PostWithConstructor[] data = connection.Query<PostWithConstructor, UserWithConstructor, PostWithConstructor>(sql, (post, user) => { post.Owner = user; return post;}).ToArray();
+            PostWithConstructor[] data = await connection.Query<PostWithConstructor, UserWithConstructor, PostWithConstructor>(sql, (post, user) => { post.Owner = user; return post;}).ToArray();
             var p = data.First();
 
             p.FullContent.IsEqualTo("Sams Post1");
@@ -93,7 +95,7 @@ namespace SqlMapper
 
             data[2].Owner.IsNull();
 
-            connection.Execute("drop table #Users drop table #Posts");
+            await connection.Execute("drop table #Users drop table #Posts");
         }
 
 
@@ -112,9 +114,9 @@ namespace SqlMapper
             public string B { get; set; }
         }
 
-        public void TestMultipleConstructors()
+        public async Task TestMultipleConstructorsAsync()
         {
-            MultipleConstructors mult = connection.Query<MultipleConstructors>("select 0 A, 'Dapper' b").First();
+            MultipleConstructors mult = await connection.Query<MultipleConstructors>("select 0 A, 'Dapper' b").FirstAsync();
             mult.A.IsEqualTo(0);
             mult.B.IsEqualTo("Dapper");
         }
@@ -133,9 +135,9 @@ namespace SqlMapper
             public string B { get; set; }
         }
 
-        public void TestConstructorsWithAccessModifiers()
+        public async Task TestConstructorsWithAccessModifiersAsync()
         {
-            ConstructorsWithAccessModifiers value = connection.Query<ConstructorsWithAccessModifiers>("select 0 A, 'Dapper' b").First();
+            ConstructorsWithAccessModifiers value = await connection.Query<ConstructorsWithAccessModifiers>("select 0 A, 'Dapper' b").FirstAsync();
             value.A.IsEqualTo(1);
             value.B.IsEqualTo("Dapper!");
         }
@@ -157,10 +159,10 @@ namespace SqlMapper
             public Guid G { get; set; }
         }
 
-        public void TestNoDefaultConstructor()
+        public async Task TestNoDefaultConstructorAsync()
         {
             var guid = Guid.NewGuid();
-            NoDefaultConstructor nodef = connection.Query<NoDefaultConstructor>("select CAST(NULL AS integer) A1,  CAST(NULL AS integer) b1, CAST(NULL AS real) f1, 'Dapper' s1, G1 = @id", new { Id = guid }).First();
+            NoDefaultConstructor nodef = await connection.Query<NoDefaultConstructor>("select CAST(NULL AS integer) A1,  CAST(NULL AS integer) b1, CAST(NULL AS real) f1, 'Dapper' s1, G1 = @id", new { Id = guid }).FirstAsync();
             nodef.A.IsEqualTo(0);
             nodef.B.IsEqualTo(null);
             nodef.F.IsEqualTo(0);
@@ -181,11 +183,11 @@ namespace SqlMapper
             public char? Char3 { get; set; }
         }
 
-        public void TestNoDefaultConstructorWithChar()
+        public async Task TestNoDefaultConstructorWithCharAsync()
         {
             const char c1 = 'ą';
             const char c3 = 'ó';
-            NoDefaultConstructorWithChar nodef = connection.Query<NoDefaultConstructorWithChar>("select @c1 c1, @c2 c2, @c3 c3", new { c1 = c1, c2 = (char?)null, c3 = c3 }).First();
+            NoDefaultConstructorWithChar nodef = await connection.Query<NoDefaultConstructorWithChar>("select @c1 c1, @c2 c2, @c3 c3", new { c1 = c1, c2 = (char?)null, c3 = c3 }).FirstAsync();
             nodef.Char1.IsEqualTo(c1);
             nodef.Char2.IsEqualTo(null);
             nodef.Char3.IsEqualTo(c3);
@@ -204,9 +206,9 @@ namespace SqlMapper
             public ShortEnum? NE2 { get; set; }
         }
 
-        public void TestNoDefaultConstructorWithEnum()
+        public async Task TestNoDefaultConstructorWithEnumAsync()
         {
-            NoDefaultConstructorWithEnum nodef = connection.Query<NoDefaultConstructorWithEnum>("select cast(2 as smallint) E1, cast(5 as smallint) n1, cast(null as smallint) n2").First();
+            NoDefaultConstructorWithEnum nodef = await connection.Query<NoDefaultConstructorWithEnum>("select cast(2 as smallint) E1, cast(5 as smallint) n1, cast(null as smallint) n2").FirstAsync();
             nodef.E.IsEqualTo(ShortEnum.Two);
             nodef.NE1.IsEqualTo(ShortEnum.Five);
             nodef.NE2.IsEqualTo(null);
@@ -222,19 +224,19 @@ namespace SqlMapper
             }
         }
 
-        public void TestNoDefaultConstructorBinary()
+        public async Task TestNoDefaultConstructorBinaryAsync()
         {
             byte[] orig = new byte[20];
             new Random(123456).NextBytes(orig);
             var input = new System.Data.Linq.Binary(orig);
-            var output = connection.Query<NoDefaultConstructorWithBinary>("select @input as val", new { input }).First().Value;
+            var output = (await connection.Query<NoDefaultConstructorWithBinary>("select @input as val", new { input }).FirstAsync()).Value;
             output.ToArray().IsSequenceEqualTo(orig);
         }
 
         // http://stackoverflow.com/q/8593871
-        public void TestAbstractInheritance() 
+        public async Task TestAbstractInheritanceAsync() 
         {
-            var order = connection.Query<AbstractInheritance.ConcreteOrder>("select 1 Internal,2 Protected,3 [Public],4 Concrete").First();
+            var order = await connection.Query<AbstractInheritance.ConcreteOrder>("select 1 Internal,2 Protected,3 [Public],4 Concrete").FirstAsync();
 
             order.Internal.IsEqualTo(1);
             order.ProtectedVal.IsEqualTo(2);
@@ -242,29 +244,29 @@ namespace SqlMapper
             order.Concrete.IsEqualTo(4);
         }
 
-        public void TestListOfAnsiStrings()
+        public async Task TestListOfAnsiStringsAsync()
         {
-            var results = connection.Query<string>("select * from (select 'a' str union select 'b' union select 'c') X where str in @strings",
+            var results = await connection.Query<string>("select * from (select 'a' str union select 'b' union select 'c') X where str in @strings",
                 new { strings = new[] { new DbString { IsAnsi = true, Value = "a" }, new DbString { IsAnsi = true, Value = "b" } } }).ToList();
 
             results[0].IsEqualTo("a");
             results[1].IsEqualTo("b");
         }
 
-        public void TestNullableGuidSupport()
+        public async Task TestNullableGuidSupportAsync()
         {
-            var guid = connection.Query<Guid?>("select null").First();
+            var guid = await connection.Query<Guid?>("select null").FirstAsync();
             guid.IsNull();
 
             guid = Guid.NewGuid();
-            var guid2 = connection.Query<Guid?>("select @guid", new { guid }).First();
+            var guid2 = await connection.Query<Guid?>("select @guid", new { guid }).FirstAsync();
             guid.IsEqualTo(guid2);
         }
 
-        public void TestNonNullableGuidSupport()
+        public async Task TestNonNullableGuidSupportAsync()
         {
             var guid = Guid.NewGuid();
-            var guid2 = connection.Query<Guid?>("select @guid", new { guid }).First();
+            var guid2 = await connection.Query<Guid?>("select @guid", new { guid }).FirstAsync();
             Assert.IsTrue(guid == guid2);
         }
 
@@ -283,105 +285,105 @@ namespace SqlMapper
         
         }
 
-        public void TestStructs()
+        public async Task TestStructsAsync()
         {
-            var car = connection.Query<Car>("select 'Ford' Name, 21 Age, 2 Trap").First();
+            var car = await connection.Query<Car>("select 'Ford' Name, 21 Age, 2 Trap").FirstAsync();
 
             car.Age.IsEqualTo(21);
             car.Name.IsEqualTo("Ford");
             ((int)car.Trap).IsEqualTo(2);
         }
 
-        public void SelectListInt()
+        public async Task SelectListIntAsync()
         {
-            connection.Query<int>("select 1 union all select 2 union all select 3")
+            (await connection.Query<int>("select 1 union all select 2 union all select 3").ToList())
               .IsSequenceEqualTo(new[] { 1, 2, 3 });
         }
-        public void SelectBinary()
+        public async Task SelectBinaryAsync()
         {
-            connection.Query<byte[]>("select cast(1 as varbinary(4))").First().SequenceEqual(new byte[] { 1 });
+			(await connection.Query<byte[]>("select cast(1 as varbinary(4))").FirstAsync()).IsSequenceEqualTo(new byte[] { 1 });
         }
-        public void PassInIntArray()
+        public async Task PassInIntArrayAsync()
         {
-            connection.Query<int>("select * from (select 1 as Id union all select 2 union all select 3) as X where Id in @Ids", new { Ids = new int[] { 1, 2, 3 }.AsEnumerable() })
+            (await connection.Query<int>("select * from (select 1 as Id union all select 2 union all select 3) as X where Id in @Ids", new { Ids = new int[] { 1, 2, 3 }.AsEnumerable() }).ToList())
              .IsSequenceEqualTo(new[] { 1, 2, 3 });
         }
 
-        public void PassInEmptyIntArray()
+        public async Task PassInEmptyIntArrayAsync()
         {
-            connection.Query<int>("select * from (select 1 as Id union all select 2 union all select 3) as X where Id in @Ids", new { Ids = new int[0] })
+            (await connection.Query<int>("select * from (select 1 as Id union all select 2 union all select 3) as X where Id in @Ids", new { Ids = new int[0] }).ToList())
              .IsSequenceEqualTo(new int[0]);
         }
 
-        public void TestSchemaChanged()
+        public async Task TestSchemaChangedAsync()
         {
-            connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
-            var d = connection.Query<Dog>("select * from #dog").Single();
+            await connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
+            var d = await connection.Query<Dog>("select * from #dog").SingleAsync();
             d.Name.IsEqualTo("Alf");
             d.Age.IsEqualTo(1);
-            connection.Execute("alter table #dog drop column Name");
-            d = connection.Query<Dog>("select * from #dog").Single();
+            await connection.Execute("alter table #dog drop column Name");
+            d = await connection.Query<Dog>("select * from #dog").SingleAsync();
             d.Name.IsNull();
             d.Age.IsEqualTo(1);
-            connection.Execute("drop table #dog");
+            await connection.Execute("drop table #dog");
         }
 
-        public void TestSchemaChangedMultiMap()
+        public async Task TestSchemaChangedMultiMapAsync()
         {
-            connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
-            var tuple = connection.Query<Dog, Dog, Tuple<Dog, Dog>>("select * from #dog d1 join #dog d2 on 1=1", (d1, d2) => Tuple.Create(d1, d2), splitOn: "Age").Single();
+            await connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
+            var tuple = await connection.Query<Dog, Dog, Tuple<Dog, Dog>>("select * from #dog d1 join #dog d2 on 1=1", (d1, d2) => Tuple.Create(d1, d2), splitOn: "Age").SingleAsync();
 
             tuple.Item1.Name.IsEqualTo("Alf");
             tuple.Item1.Age.IsEqualTo(1);
             tuple.Item2.Name.IsEqualTo("Alf");
             tuple.Item2.Age.IsEqualTo(1);
 
-            connection.Execute("alter table #dog drop column Name");
-            tuple = connection.Query<Dog, Dog, Tuple<Dog, Dog>>("select * from #dog d1 join #dog d2 on 1=1", (d1, d2) => Tuple.Create(d1, d2), splitOn: "Age").Single();
+            await connection.Execute("alter table #dog drop column Name");
+            tuple = await connection.Query<Dog, Dog, Tuple<Dog, Dog>>("select * from #dog d1 join #dog d2 on 1=1", (d1, d2) => Tuple.Create(d1, d2), splitOn: "Age").SingleAsync();
 
             tuple.Item1.Name.IsNull();
             tuple.Item1.Age.IsEqualTo(1);
             tuple.Item2.Name.IsNull();
             tuple.Item2.Age.IsEqualTo(1);
 
-            connection.Execute("drop table #dog");
+            await connection.Execute("drop table #dog");
         }
 
-        public void TestReadMultipleIntegersWithSplitOnAny()
+        public async Task TestReadMultipleIntegersWithSplitOnAnyAsync()
         {
-            connection.Query<int, int, int, Tuple<int, int, int>>(
-                "select 1,2,3 union all select 4,5,6", Tuple.Create, splitOn: "*")
+            (await connection.Query<int, int, int, Tuple<int, int, int>>(
+                "select 1,2,3 union all select 4,5,6", Tuple.Create, splitOn: "*").ToList())
              .IsSequenceEqualTo(new[] { Tuple.Create(1, 2, 3), Tuple.Create(4, 5, 6) });
         }
 
-        public void TestDoubleParam()
+        public async Task TestDoubleParamAsync()
         {
-            connection.Query<double>("select @d", new { d = 0.1d }).First()
+            (await connection.Query<double>("select @d", new { d = 0.1d }).FirstAsync())
                 .IsEqualTo(0.1d);
         }
 
-        public void TestBoolParam()
+        public async Task TestBoolParamAsync()
         {
-            connection.Query<bool>("select @b", new { b = false }).First()
+            (await connection.Query<bool>("select @b", new { b = false }).FirstAsync())
                 .IsFalse();
         }
 
         // http://code.google.com/p/dapper-dot-net/issues/detail?id=70
         // https://connect.microsoft.com/VisualStudio/feedback/details/381934/sqlparameter-dbtype-dbtype-time-sets-the-parameter-to-sqldbtype-datetime-instead-of-sqldbtype-time
-        public void TestTimeSpanParam()
+        public async Task TestTimeSpanParamAsync()
         {
-            connection.Query<TimeSpan>("select @ts", new { ts = TimeSpan.FromMinutes(42) }).First()
+            (await connection.Query<TimeSpan>("select @ts", new { ts = TimeSpan.FromMinutes(42) }).FirstAsync())
                 .IsEqualTo(TimeSpan.FromMinutes(42));
         }
 
-        public void TestStrings()
+        public async Task TestStringsAsync()
         {
-            connection.Query<string>(@"select 'a' a union select 'b'")
+            (await connection.Query<string>(@"select 'a' a union select 'b'").ToList())
                 .IsSequenceEqualTo(new[] { "a", "b" });
         }
 
         // see http://stackoverflow.com/questions/16726709/string-format-with-sql-wildcard-causing-dapper-query-to-break
-        public void CheckComplexConcat()
+        public async Task CheckComplexConcatAsync()
         {
             string end_wildcard = @"
 SELECT * FROM #users16726709
@@ -408,9 +410,9 @@ WHERE (first_name LIKE {0} OR last_name LIKE {0});";
 insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('Tony','Farcus') insert #users16726709 values ('Albert','Tenof')");
 
             // Using Dapper
-            connection.Query(end_wildcard, new { search_term = term }).Count().IsEqualTo(2);
-            connection.Query(both_wildcards, new { search_term = term }).Count().IsEqualTo(3);
-            connection.Query(query, new { search_term = term }).Count().IsEqualTo(2);
+            (await connection.Query(end_wildcard, new { search_term = term }).Count()).IsEqualTo(2);
+            (await connection.Query(both_wildcards, new { search_term = term }).Count()).IsEqualTo(3);
+            (await connection.Query(query, new { search_term = term }).Count()).IsEqualTo(2);
 
         }
 
@@ -430,22 +432,22 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             public EnumParam? B { get; set; }
             public EnumParam? C { get; set; }
         }
-        public void TestEnumParamsWithNullable()
+        public async Task TestEnumParamsWithNullableAsync()
         {
             EnumParam a = EnumParam.A;
             EnumParam? b = EnumParam.B, c = null;
-            var obj = connection.Query<EnumParamObject>("select @a as A, @b as B, @c as C",
-                new { a, b, c }).Single();
+            var obj = await connection.Query<EnumParamObject>("select @a as A, @b as B, @c as C",
+                new { a, b, c }).SingleAsync();
             obj.A.IsEqualTo(EnumParam.A);
             obj.B.IsEqualTo(EnumParam.B);
             obj.C.IsEqualTo(null);
         }
-        public void TestEnumParamsWithoutNullable()
+        public async Task TestEnumParamsWithoutNullableAsync()
         {
             EnumParam a = EnumParam.A;
             EnumParam b = EnumParam.B, c = 0;
-            var obj = connection.Query<EnumParamObjectNonNullable>("select @a as A, @b as B, @c as C",
-                new { a, b, c }).Single();
+            var obj = await connection.Query<EnumParamObjectNonNullable>("select @a as A, @b as B, @c as C",
+                new { a, b, c }).SingleAsync();
             obj.A.IsEqualTo(EnumParam.A);
             obj.B.IsEqualTo(EnumParam.B);
             obj.C.IsEqualTo((EnumParam)0);
@@ -460,10 +462,10 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             public int IgnoredProperty { get { return 1; } }
         }
 
-        public void TestExtraFields()
+        public async Task TestExtraFieldsAsync()
         {
             var guid = Guid.NewGuid();
-            var dog = connection.Query<Dog>("select '' as Extra, 1 as Age, 0.1 as Name1 , Id = @id", new { Id = guid });
+            var dog = await connection.Query<Dog>("select '' as Extra, 1 as Age, 0.1 as Name1 , Id = @id", new { Id = guid }).ToList();
 
             dog.Count()
                .IsEqualTo(1);
@@ -476,10 +478,10 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
 
 
-        public void TestStrongType()
+        public async Task TestStrongTypeAsync()
         {
             var guid = Guid.NewGuid();
-            var dog = connection.Query<Dog>("select Age = @Age, Id = @Id", new { Age = (int?)null, Id = guid });
+            var dog = await connection.Query<Dog>("select Age = @Age, Id = @Id", new { Age = (int?)null, Id = guid }).ToList();
 
             dog.Count()
                 .IsEqualTo(1);
@@ -491,14 +493,14 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                 .IsEqualTo(guid);
         }
 
-        public void TestSimpleNull()
+        public async Task TestSimpleNullAsync()
         {
-            connection.Query<DateTime?>("select null").First().IsNull();
+            (await connection.Query<DateTime?>("select null").FirstAsync()).IsNull();
         }
 
-        public void TestExpando()
+        public async Task TestExpandoAsync()
         {
-            var rows = connection.Query("select 1 A, 2 B union all select 3, 4").ToList();
+            var rows = await connection.Query("select 1 A, 2 B union all select 3, 4").ToList();
 
             ((int)rows[0].A)
                 .IsEqualTo(1);
@@ -513,38 +515,38 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                 .IsEqualTo(4);
         }
 
-        public void TestStringList()
+        public async Task TestStringListAsync()
         {
-            connection.Query<string>("select * from (select 'a' as x union all select 'b' union all select 'c') as T where x in @strings", new { strings = new[] { "a", "b", "c" } })
+            (await connection.Query<string>("select * from (select 'a' as x union all select 'b' union all select 'c') as T where x in @strings", new { strings = new[] { "a", "b", "c" } }).ToList())
                 .IsSequenceEqualTo(new[] { "a", "b", "c" });
 
-            connection.Query<string>("select * from (select 'a' as x union all select 'b' union all select 'c') as T where x in @strings", new { strings = new string[0] })
+            (await connection.Query<string>("select * from (select 'a' as x union all select 'b' union all select 'c') as T where x in @strings", new { strings = new string[0] }).ToList())
                    .IsSequenceEqualTo(new string[0]);
         }
 
-        public void TestExecuteCommand()
+        public async Task TestExecuteCommandAsync()
         {
-            connection.Execute(@"
+            (await connection.Execute(@"
     set nocount on 
     create table #t(i int) 
     set nocount off 
     insert #t 
     select @a a union all select @b 
     set nocount on 
-    drop table #t", new { a = 1, b = 2 }).IsEqualTo(2);
+    drop table #t", new { a = 1, b = 2 })).IsEqualTo(2);
         }
-        public void TestExecuteCommandWithHybridParameters()
+        public async Task TestExecuteCommandWithHybridParametersAsync()
         {
             var p = new DynamicParameters(new { a = 1, b = 2 });
             p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.Output);
-            connection.Execute(@"set @c = @a + @b", p);
+            await connection.Execute(@"set @c = @a + @b", p);
             p.Get<int>("@c").IsEqualTo(3);
         }
-        public void TestExecuteMultipleCommand()
+        public async Task TestExecuteMultipleCommandAsync()
         {
             connection.Execute("create table #t(i int)");
-            int tally = connection.Execute(@"insert #t (i) values(@a)", new[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
-            int sum = connection.Query<int>("select sum(i) from #t drop table #t").First();
+            int tally = await connection.Execute(@"insert #t (i) values(@a)", new[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
+            int sum = await connection.Query<int>("select sum(i) from #t drop table #t").FirstAsync();
             tally.IsEqualTo(4);
             sum.IsEqualTo(10);
         }
@@ -555,32 +557,32 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             public int Age { get; set; }
         }
 
-        public void TestExecuteMultipleCommandStrongType()
+        public async Task TestExecuteMultipleCommandStrongTypeAsync()
         {
-            connection.Execute("create table #t(Name nvarchar(max), Age int)");
-            int tally = connection.Execute(@"insert #t (Name,Age) values(@Name, @Age)", new List<Student> 
+            await connection.Execute("create table #t(Name nvarchar(max), Age int)");
+            int tally = await connection.Execute(@"insert #t (Name,Age) values(@Name, @Age)", new List<Student> 
             {
                 new Student{Age = 1, Name = "sam"},
                 new Student{Age = 2, Name = "bob"}
             });
-            int sum = connection.Query<int>("select sum(Age) from #t drop table #t").First();
+            int sum = await connection.Query<int>("select sum(Age) from #t drop table #t").FirstAsync();
             tally.IsEqualTo(2);
             sum.IsEqualTo(3);
         }
 
-        public void TestExecuteMultipleCommandObjectArray()
+        public async Task TestExecuteMultipleCommandObjectArrayAsync()
         {
-            connection.Execute("create table #t(i int)");
-            int tally = connection.Execute(@"insert #t (i) values(@a)", new object[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
-            int sum = connection.Query<int>("select sum(i) from #t drop table #t").First();
+            await connection.Execute("create table #t(i int)");
+            int tally = await connection.Execute(@"insert #t (i) values(@a)", new object[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
+            int sum = await connection.Query<int>("select sum(i) from #t drop table #t").FirstAsync();
             tally.IsEqualTo(4);
             sum.IsEqualTo(10);
         }
 
-        public void TestMassiveStrings()
+        public async Task TestMassiveStringsAsync()
         {
             var str = new string('X', 20000);
-            connection.Query<string>("select @a", new { a = str }).First()
+            (await connection.Query<string>("select @a", new { a = str }).FirstAsync())
                 .IsEqualTo(str);
         }
 
@@ -595,20 +597,20 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             private int PrivGet { get { return _priv;} }
         }
 
-        public void TestSetInternal()
+        public async Task TestSetInternalAsync()
         {
-            connection.Query<TestObj>("select 10 as [Internal]").First()._internal.IsEqualTo(10);
+            (await connection.Query<TestObj>("select 10 as [Internal]").FirstAsync())._internal.IsEqualTo(10);
         }
 
-        public void TestSetPrivate()
+        public async Task TestSetPrivateAsync()
         {
-            connection.Query<TestObj>("select 10 as [Priv]").First()._priv.IsEqualTo(10);
+            (await connection.Query<TestObj>("select 10 as [Priv]").FirstAsync())._priv.IsEqualTo(10);
         }
 
 
-        public void TestExpandWithNullableFields()
+        public async Task TestExpandWithNullableFieldsAsync()
         {
-            var row = connection.Query("select null A, 2 B").Single();
+            var row = await connection.Query("select null A, 2 B").SingleAsync();
             
             ((int?)row.A)
                 .IsNull();
@@ -616,16 +618,16 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             ((int?)row.B)
                 .IsEqualTo(2);
         }
-        public void TestEnumeration()
+        public async Task TestEnumerationAsync()
         {
-            var en = connection.Query<int>("select 1 as one union all select 2 as one", buffered: false);
+            var en = connection.Query<int>("select 1 as one union all select 2 as one").Next();
             var i = en.GetEnumerator();
             i.MoveNext();
 
             bool gotException = false;
             try
             {
-                var x = connection.Query<int>("select 1 as one", buffered: false).First();
+                var x = await connection.Query<int>("select 1 as one").FirstAsync();
             }
             catch (Exception)
             {
@@ -636,21 +638,21 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             { }
 
             // should not exception, since enumertated
-            en = connection.Query<int>("select 1 as one", buffered: false);
+            en = await connection.Query<int>("select 1 as one").ToList();
 
             gotException.IsTrue();
         }
 
-        public void TestEnumerationDynamic()
+        public async Task TestEnumerationDynamicAsync()
         {
-            var en = connection.Query("select 1 as one union all select 2 as one", buffered: false);
+            var en = connection.Query("select 1 as one union all select 2 as one").Next();
             var i = en.GetEnumerator();
             i.MoveNext();
 
             bool gotException = false;
             try
             {
-                var x = connection.Query("select 1 as one", buffered: false).First();
+                var x = await connection.Query("select 1 as one").FirstAsync();
             }
             catch (Exception)
             {
@@ -661,25 +663,25 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             { }
 
             // should not exception, since enumertated
-            en = connection.Query("select 1 as one", buffered: false);
+            en = await connection.Query("select 1 as one").ToList();
 
             gotException.IsTrue();
         }
 
-        public void TestNakedBigInt()
+        public async Task TestNakedBigIntAsync()
         {
             long foo = 12345;
-            var result = connection.Query<long>("select @foo", new { foo }).Single();
+            var result = await connection.Query<long>("select @foo", new { foo }).SingleAsync();
             foo.IsEqualTo(result);
         }
 
-        public void TestBigIntMember()
+        public async Task TestBigIntMemberAsync()
         {
             long foo = 12345;
-            var result = connection.Query<WithBigInt>(@"
+            var result = await connection.Query<WithBigInt>(@"
 declare @bar table(Value bigint)
 insert @bar values (@foo)
-select * from @bar", new { foo }).Single();
+select * from @bar", new { foo }).SingleAsync();
             result.Value.IsEqualTo(foo);
         }
         class WithBigInt
@@ -699,7 +701,7 @@ select * from @bar", new { foo }).Single();
             public string Content { get; set; }
             public Comment Comment { get; set; }
         }
-        public void TestMultiMap()
+        public async Task TestMultiMapAsync()
         {
             var createSql = @"
                 create table #Users (Id int, Name varchar(20))
@@ -712,14 +714,14 @@ select * from @bar", new { foo }).Single();
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')
 ";
-            connection.Execute(createSql);
+            await connection.Execute(createSql);
 
             var sql =
 @"select * from #Posts p 
 left join #Users u on u.Id = p.OwnerId 
 Order by p.Id";
 
-            var data = connection.Query<Post, User, Post>(sql, (post, user) => { post.Owner = user; return post; }).ToList();
+            var data = await connection.Query<Post, User, Post>(sql, (post, user) => { post.Owner = user; return post; }).ToList();
             var p = data.First();
 
             p.Content.IsEqualTo("Sams Post1");
@@ -729,7 +731,7 @@ Order by p.Id";
 
             data[2].Owner.IsNull();
 
-            connection.Execute("drop table #Users drop table #Posts");
+            await connection.Execute("drop table #Users drop table #Posts");
         }
 
 
@@ -747,7 +749,7 @@ Order by p.Id";
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')
 ";
-            connection.Execute(createSql);
+            await connection.Execute(createSql);
 
             var sql =
 @"select p.*, u.Id, u.Name + '0' Name from #Posts p 
@@ -763,7 +765,7 @@ Order by p.Id
 
             for (int i = 0; i < 2; i++)
             {
-                var data = grid.Read<Post, User, Post>((post, user) => { post.Owner = user; return post; }).ToList();
+                var data = await grid.Read<Post, User, Post>((post, user) => { post.Owner = user; return post; }).ToList();
                 var p = data.First();
 
                 p.Content.IsEqualTo("Sams Post1");
@@ -787,10 +789,10 @@ Order by p.Id
                 var c = grid.Read<int>();
                 var d = grid.Read<int>();
 
-                a.Single().Equals(1);
-                b.Single().Equals(2);
-                c.Single().Equals(3);
-                d.Single().Equals(4);
+                (await a.SingleAsync()).Equals(1);
+                (await b.SingleAsync()).Equals(2);
+                (await c.SingleAsync()).Equals(3);
+                (await d.SingleAsync()).Equals(4);
             }
         }
 
@@ -798,10 +800,10 @@ Order by p.Id
         {
             using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
             {
-                var a = grid.Read<int>(false);
+                var a = await grid.Read<int>();
                 try
                 {
-                    var b = grid.Read<int>(false);
+                    var b = await grid.Read<int>();
                     throw new InvalidOperationException(); // should have thrown
                 }
                 catch (InvalidOperationException)
@@ -815,10 +817,10 @@ Order by p.Id
         {
             using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
             {
-                var a = grid.Read<int>(false).Single();
-                var b = grid.Read<int>(false).Single();
-                var c = grid.Read<int>(false).Single();
-                var d = grid.Read<int>(false).Single();
+                var a = await grid.Read<int>().SingleAsync();
+                var b = await grid.Read<int>().SingleAsync();
+                var c = await grid.Read<int>().SingleAsync();
+                var d = await grid.Read<int>().SingleAsync();
 
                 a.Equals(1);
                 b.Equals(2);
@@ -826,7 +828,7 @@ Order by p.Id
                 d.Equals(4);
             }
         }
-        public void TestMultiMapDynamic()
+        public async Task TestMultiMapDynamicAsync()
         {
             var createSql = @"
                 create table #Users (Id int, Name varchar(20))
@@ -839,14 +841,14 @@ Order by p.Id
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')
 ";
-            connection.Execute(createSql);
+            await connection.Execute(createSql);
 
             var sql =
 @"select * from #Posts p 
 left join #Users u on u.Id = p.OwnerId 
 Order by p.Id";
 
-            var data = connection.Query<dynamic, dynamic, dynamic>(sql, (post, user) => { post.Owner = user; return post; }).ToList();
+            var data = await connection.Query<dynamic, dynamic, dynamic>(sql, (post, user) => { post.Owner = user; return post; }).ToList();
             var p = data.First();
 
             // hairy extension method support for dynamics
@@ -857,7 +859,7 @@ Order by p.Id";
 
             ((object)data[2].Owner).IsNull();
 
-            connection.Execute("drop table #Users drop table #Posts");
+            await connection.Execute("drop table #Users drop table #Posts");
         }
 
         class Product
@@ -872,41 +874,41 @@ Order by p.Id";
             public string Name { get; set; }
             public string Description { get; set; }
         }
-        public void TestMultiMapWithSplit() // http://stackoverflow.com/q/6056778/23354
+        public async Task TestMultiMapWithSplit() // http://stackoverflow.com/q/6056778/233Async54
         {
             var sql = @"select 1 as id, 'abc' as name, 2 as id, 'def' as name";
-            var product = connection.Query<Product, Category, Product>(sql, (prod, cat) =>
+            var product = await connection.Query<Product, Category, Product>(sql, (prod, cat) =>
             {
                 prod.Category = cat;
                 return prod;
-            }).First();
+            }).FirstAsync();
             // assertions
             product.Id.IsEqualTo(1);
             product.Name.IsEqualTo("abc");
             product.Category.Id.IsEqualTo(2);
             product.Category.Name.IsEqualTo("def");
         }
-        public void TestMultiMapWithSplitWithNullValue() // http://stackoverflow.com/q/10744728/449906
+        public async Task TestMultiMapWithSplitWithNullValue() // http://stackoverflow.com/q/10744728/4499Async06
         {
             var sql = @"select 1 as id, 'abc' as name, NULL as description, 'def' as name";
-            var product = connection.Query<Product, Category, Product>(sql, (prod, cat) =>
+            var product = await connection.Query<Product, Category, Product>(sql, (prod, cat) =>
             {
                 prod.Category = cat;
                 return prod;
-            }, splitOn: "description").First();
+            }, splitOn: "description").FirstAsync();
             // assertions
             product.Id.IsEqualTo(1);
             product.Name.IsEqualTo("abc");
             product.Category.IsNull();
         }
-        public void TestMultiMapWithSplitWithNullValueAndSpoofColumn() // http://stackoverflow.com/q/10744728/449906
+        public async Task TestMultiMapWithSplitWithNullValueAndSpoofColumn() // http://stackoverflow.com/q/10744728/4499Async06
         {
             var sql = @"select 1 as id, 'abc' as name, 1 as spoof, NULL as description, 'def' as name";
-            var product = connection.Query<Product, Category, Product>(sql, (prod, cat) =>
+            var product = await connection.Query<Product, Category, Product>(sql, (prod, cat) =>
             {
                 prod.Category = cat;
                 return prod;
-            }, splitOn: "spoof").First();
+            }, splitOn: "spoof").FirstAsync();
             // assertions
             product.Id.IsEqualTo(1);
             product.Name.IsEqualTo("abc");
@@ -915,10 +917,10 @@ Order by p.Id";
             product.Category.Name.IsEqualTo("def");
             product.Category.Description.IsNull();
         }
-        public void TestFieldsAndPrivates()
+        public async Task TestFieldsAndPrivatesAsync()
         {
-            var data = connection.Query<TestFieldCaseAndPrivatesEntity>(
-                @"select a=1,b=2,c=3,d=4,f='5'").Single();
+            var data = await connection.Query<TestFieldCaseAndPrivatesEntity>(
+                @"select a=1,b=2,c=3,d=4,f='5'").SingleAsync();
 
 
             data.a.IsEqualTo(1);
@@ -953,19 +955,19 @@ Order by p.Id";
             string s;
             using (var multi = await connection.QueryMultipleAsync(sql))
             {
-                i = multi.Read<int>().First();
-                s = multi.Read<string>().Single();
-                j = multi.Read<int>().Sum();
+                i = await multi.Read<int>().FirstAsync();
+                s = await multi.Read<string>().SingleAsync();
+                j = await multi.Read<int>().Sum().FirstAsync();
             }
             Assert.IsEqualTo(i, 1);
             Assert.IsEqualTo(s, "abc");
             Assert.IsEqualTo(j, 3);
         }
-        public void TestMultiMappingVariations()
+        public async Task TestMultiMappingVariationsAsync()
         {
             var sql = @"select 1 as Id, 'a' as Content, 2 as Id, 'b' as Content, 3 as Id, 'c' as Content, 4 as Id, 'd' as Content, 5 as Id, 'e' as Content";
 
-            var order = connection.Query<dynamic, dynamic, dynamic, dynamic>(sql, (o, owner, creator) => { o.Owner = owner; o.Creator = creator; return o; }).First();
+            var order = await connection.Query<dynamic, dynamic, dynamic, dynamic>(sql, (o, owner, creator) => { o.Owner = owner; o.Creator = creator; return o; }).FirstAsync();
 
             Assert.IsEqualTo(order.Id, 1);
             Assert.IsEqualTo(order.Content, "a");
@@ -974,13 +976,13 @@ Order by p.Id";
             Assert.IsEqualTo(order.Creator.Id, 3);
             Assert.IsEqualTo(order.Creator.Content, "c");
 
-            order = connection.Query<dynamic, dynamic, dynamic, dynamic, dynamic>(sql, (o, owner, creator, address) =>
+            order = await connection.Query<dynamic, dynamic, dynamic, dynamic, dynamic>(sql, (o, owner, creator, address) =>
             {
                 o.Owner = owner;
                 o.Creator = creator;
                 o.Owner.Address = address;
                 return o;
-            }).First();
+            }).FirstAsync();
 
             Assert.IsEqualTo(order.Id, 1);
             Assert.IsEqualTo(order.Content, "a");
@@ -991,7 +993,7 @@ Order by p.Id";
             Assert.IsEqualTo(order.Owner.Address.Id, 4);
             Assert.IsEqualTo(order.Owner.Address.Content, "d");
 
-            order = connection.Query<dynamic, dynamic, dynamic, dynamic, dynamic, dynamic>(sql, (a, b, c, d, e) => { a.B = b; a.C = c; a.C.D = d; a.E = e; return a; }).First();
+            order = await connection.Query<dynamic, dynamic, dynamic, dynamic, dynamic, dynamic>(sql, (a, b, c, d, e) => { a.B = b; a.C = c; a.C.D = d; a.E = e; return a; }).FirstAsync();
 
             Assert.IsEqualTo(order.Id, 1);
             Assert.IsEqualTo(order.Content, "a");
@@ -1018,10 +1020,10 @@ Order by p.Id";
             public string Derived2 { get; private set; }
         }
 
-        public void TestInheritance()
+        public async Task TestInheritanceAsync()
         {
             // Test that inheritance works.
-            var list = connection.Query<InheritanceTest2>("select 'One' as Derived1, 'Two' as Derived2, 'Three' as Base1, 'Four' as Base2");
+            var list = await connection.Query<InheritanceTest2>("select 'One' as Derived1, 'Two' as Derived2, 'Three' as Base1, 'Four' as Base2").ToList();
             list.First().Derived1.IsEqualTo("One");
             list.First().Derived2.IsEqualTo("Two");
             list.First().Base1.IsEqualTo("Three");
@@ -1044,7 +1046,7 @@ Order by p.Id";
             public string Name { get; set; }
         }
 
-        public void MultiRSSqlCE()
+        public async Task MultiRSSqlCEAsync()
         {
             if (File.Exists("Test.sdf"))
                 File.Delete("Test.sdf");
@@ -1055,16 +1057,16 @@ Order by p.Id";
 
             using (var cnn = new SqlCeConnection(cnnStr))
             {
-                cnn.Open();
+                await cnn.OpenAsync();
 
-                cnn.Execute("create table Posts (ID int, Title nvarchar(50), Body nvarchar(50), AuthorID int)");
-                cnn.Execute("create table Authors (ID int, Name nvarchar(50))");
+                await cnn.Execute("create table Posts (ID int, Title nvarchar(50), Body nvarchar(50), AuthorID int)");
+                await cnn.Execute("create table Authors (ID int, Name nvarchar(50))");
 
-                cnn.Execute("insert Posts values (1,'title','body',1)");
-                cnn.Execute("insert Posts values(2,'title2','body2',null)");
-                cnn.Execute("insert Authors values(1,'sam')");
+                await cnn.Execute("insert Posts values (1,'title','body',1)");
+                await cnn.Execute("insert Posts values(2,'title2','body2',null)");
+                await cnn.Execute("insert Authors values(1,'sam')");
 
-                var data = cnn.Query<PostCE, AuthorCE, PostCE>(@"select * from Posts p left join Authors a on a.ID = p.AuthorID", (post, author) => { post.Author = author; return post; }).ToList();
+                var data = await cnn.Query<PostCE, AuthorCE, PostCE>(@"select * from Posts p left join Authors a on a.ID = p.AuthorID", (post, author) => { post.Author = author; return post; }).ToList();
                 var firstPost = data.First();
                 firstPost.Title.IsEqualTo("title");
                 firstPost.Author.Name.IsEqualTo("sam");
@@ -1085,47 +1087,47 @@ Order by p.Id";
         {
             public TestEnum EnumEnum { get; set; }
         }
-        public void TestEnumWeirdness()
+        public async Task TestEnumWeirdnessAsync()
         {
-            connection.Query<TestEnumClass>("select null as [EnumEnum]").First().EnumEnum.IsEqualTo(null);
-            connection.Query<TestEnumClass>("select cast(1 as tinyint) as [EnumEnum]").First().EnumEnum.IsEqualTo(TestEnum.Bla);
+            (await connection.Query<TestEnumClass>("select cast(1 as tinyint) as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
+            (await connection.Query<TestEnumClass>("select null as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(null);
         }
-        public void TestEnumStrings()
+        public async Task TestEnumStringsAsync()
         {
-            connection.Query<TestEnumClassNoNull>("select 'BLA' as [EnumEnum]").First().EnumEnum.IsEqualTo(TestEnum.Bla);
-            connection.Query<TestEnumClassNoNull>("select 'bla' as [EnumEnum]").First().EnumEnum.IsEqualTo(TestEnum.Bla);
+            (await connection.Query<TestEnumClassNoNull>("select 'BLA' as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
+            (await connection.Query<TestEnumClassNoNull>("select 'bla' as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
 
-            connection.Query<TestEnumClass>("select 'BLA' as [EnumEnum]").First().EnumEnum.IsEqualTo(TestEnum.Bla);
-            connection.Query<TestEnumClass>("select 'bla' as [EnumEnum]").First().EnumEnum.IsEqualTo(TestEnum.Bla);
+            (await connection.Query<TestEnumClass>("select 'BLA' as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
+            (await connection.Query<TestEnumClass>("select 'bla' as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
         }
 
-        public void TestSupportForDynamicParameters()
+        public async Task TestSupportForDynamicParametersAsync()
         {
             var p = new DynamicParameters();
             p.Add("name", "bob");
             p.Add("age", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-            connection.Query<string>("set @age = 11 select @name", p).First().IsEqualTo("bob");
+            (await connection.Query<string>("set @age = 11 select @name", p).FirstAsync()).IsEqualTo("bob");
 
             p.Get<int>("age").IsEqualTo(11);
         }
-        public void TestSupportForExpandoObjectParameters()
+        public async Task TestSupportForExpandoObjectParametersAsync()
         {
             dynamic p = new ExpandoObject();
             p.name = "bob";
             object parameters = p;
-            string result = connection.Query<string>("select @name", parameters).First();
+            string result = await connection.Query<string>("select @name", parameters).FirstAsync();
             result.IsEqualTo("bob");
         }
 
-        public void TestProcSupport()
+        public async Task TestProcSupportAsync()
         {
             var p = new DynamicParameters();
             p.Add("a", 11);
             p.Add("b", dbType: DbType.Int32, direction: ParameterDirection.Output);
             p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
 
-            connection.Execute(@"create proc #TestProc 
+            await connection.Execute(@"create proc #TestProc 
 	@a int,
 	@b int output
 as 
@@ -1134,16 +1136,16 @@ begin
 	select 1111
 	return @a
 end");
-            connection.Query<int>("#TestProc", p, commandType: CommandType.StoredProcedure).First().IsEqualTo(1111);
+            (await connection.Query<int>("#TestProc", p, commandType: CommandType.StoredProcedure).FirstAsync()).IsEqualTo(1111);
 
             p.Get<int>("c").IsEqualTo(11);
             p.Get<int>("b").IsEqualTo(999);
 
         }
 
-        public void TestDbString()
+        public async Task TestDbStringAsync()
         {
-            var obj = connection.Query("select datalength(@a) as a, datalength(@b) as b, datalength(@c) as c, datalength(@d) as d, datalength(@e) as e, datalength(@f) as f",
+            var obj = await connection.Query("select datalength(@a) as a, datalength(@b) as b, datalength(@c) as c, datalength(@d) as d, datalength(@e) as e, datalength(@f) as f",
                 new
                 {
                     a = new DbString { Value = "abcde", IsFixedLength = true, Length = 10, IsAnsi = true },
@@ -1152,7 +1154,7 @@ end");
                     d = new DbString { Value = "abcde", IsFixedLength = false, Length = 10, IsAnsi = false },
                     e = new DbString { Value = "abcde", IsAnsi = true },
                     f = new DbString { Value = "abcde", IsAnsi = false },
-                }).First();
+                }).FirstAsync();
             ((int)obj.a).IsEqualTo(10);
             ((int)obj.b).IsEqualTo(20);
             ((int)obj.c).IsEqualTo(5);
@@ -1180,7 +1182,7 @@ end");
             public string Name { get; set; }
         }
 
-        public void TestFlexibleMultiMapping()
+        public async Task TestFlexibleMultiMappingAsync()
         {
             var sql =
 @"select 
@@ -1188,8 +1190,8 @@ end");
     2 as AddressId, 'abc street' as Name, 1 as PersonId,
     3 as Id, 'fred' as Name
     ";
-            var personWithAddress = connection.Query<Person, Address, Extra, Tuple<Person, Address, Extra>>
-                (sql, (p, a, e) => Tuple.Create(p, a, e), splitOn: "AddressId,Id").First();
+            var personWithAddress = await connection.Query<Person, Address, Extra, Tuple<Person, Address, Extra>>
+                (sql, (p, a, e) => Tuple.Create(p, a, e), splitOn: "AddressId,Id").FirstAsync();
 
             personWithAddress.Item1.PersonId.IsEqualTo(1);
             personWithAddress.Item1.Name.IsEqualTo("bob");
@@ -1201,15 +1203,15 @@ end");
 
         }
 
-        public void TestMultiMappingWithSplitOnSpaceBetweenCommas()
+        public async Task TestMultiMappingWithSplitOnSpaceBetweenCommasAsync()
         {
             var sql = @"select 
                         1 as PersonId, 'bob' as Name, 
                         2 as AddressId, 'abc street' as Name, 1 as PersonId,
                         3 as Id, 'fred' as Name
                         ";
-            var personWithAddress = connection.Query<Person, Address, Extra, Tuple<Person, Address, Extra>>
-                (sql, (p, a, e) => Tuple.Create(p, a, e), splitOn: "AddressId, Id").First();
+            var personWithAddress = await connection.Query<Person, Address, Extra, Tuple<Person, Address, Extra>>
+                (sql, (p, a, e) => Tuple.Create(p, a, e), splitOn: "AddressId, Id").FirstAsync();
 
             personWithAddress.Item1.PersonId.IsEqualTo(1);
             personWithAddress.Item1.Name.IsEqualTo("bob");
@@ -1221,9 +1223,9 @@ end");
 
         }
 
-        public void TestFastExpandoSupportsIDictionary()
+        public async Task TestFastExpandoSupportsIDictionaryAsync()
         {
-            var row = connection.Query("select 1 A, 'two' B").First() as IDictionary<string, object>;
+            var row = (await connection.Query("select 1 A, 'two' B").FirstAsync()) as IDictionary<string, object>;
             row["A"].IsEqualTo(1);
             row["B"].IsEqualTo("two");
         }
@@ -1240,9 +1242,9 @@ end");
                 }
             }
         }
-        public void TestDapperSetsPrivates()
+        public async Task TestDapperSetsPrivatesAsync()
         {
-            connection.Query<PrivateDan>("select 'one' ShadowInDB").First().Shadow.IsEqualTo(1);
+            (await connection.Query<PrivateDan>("select 'one' ShadowInDB").FirstAsync()).Shadow.IsEqualTo(1);
         }
 
 
@@ -1282,14 +1284,14 @@ end");
         }
 
         // SQL Server specific test to demonstrate TVP 
-        public void TestTVP()
+        public async Task TestTVPAsync()
         {
             try
             {
-                connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                connection.Execute("CREATE PROC get_ints @ints int_list_type READONLY AS select * from @ints");
+                await connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
+                await connection.Execute("CREATE PROC get_ints @ints int_list_type READONLY AS select * from @ints");
 
-                var nums = connection.Query<int>("get_ints", new IntDynamicParam(new int[] { 1, 2, 3 })).ToList();
+                var nums = await connection.Query<int>("get_ints", new IntDynamicParam(new int[] { 1, 2, 3 })).ToList();
                 nums[0].IsEqualTo(1);
                 nums[1].IsEqualTo(2);
                 nums[2].IsEqualTo(3);
@@ -1300,11 +1302,11 @@ end");
             {
                 try
                 {
-                    connection.Execute("DROP PROC get_ints");
+                    connection.Execute("DROP PROC get_ints").Wait();
                 }
                 finally
                 {
-                    connection.Execute("DROP TYPE int_list_type");
+                    connection.Execute("DROP TYPE int_list_type").Wait();
                 }
             }
         }
@@ -1346,17 +1348,17 @@ end");
             }
         }
 
-        public void TestTVPWithAdditionalParams()
+        public async Task TestTVPWithAdditionalParamsAsync()
         {
             try
             {
-                connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                connection.Execute("CREATE PROC get_values @ints int_list_type READONLY, @stringParam varchar(20), @dateParam datetime AS select i.*, @stringParam as stringParam, @dateParam as dateParam from @ints i");
+                await connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
+                await connection.Execute("CREATE PROC get_values @ints int_list_type READONLY, @stringParam varchar(20), @dateParam datetime AS select i.*, @stringParam as stringParam, @dateParam as dateParam from @ints i");
 
                 var dynamicParameters = new DynamicParameterWithIntTVP(new int[] { 1, 2, 3 });
                 dynamicParameters.AddDynamicParams(new { stringParam = "stringParam", dateParam = new DateTime(2012, 1, 1) });
 
-                var results = connection.Query("get_values", dynamicParameters, commandType: CommandType.StoredProcedure).ToList();
+                var results = await connection.Query("get_values", dynamicParameters, commandType: CommandType.StoredProcedure).ToList();
                 results.Count.IsEqualTo(3);
                 for (int i = 0; i < results.Count; i++)
                 {
@@ -1371,11 +1373,11 @@ end");
             {
                 try
                 {
-                    connection.Execute("DROP PROC get_values");
+                    connection.Execute("DROP PROC get_values").Wait();
                 }
                 finally
                 {
-                    connection.Execute("DROP TYPE int_list_type");
+                    connection.Execute("DROP TYPE int_list_type").Wait();
                 }
             }
         }
@@ -1414,14 +1416,14 @@ end");
             }
         }
 
-        public void TestTVPWithAnonymousObject()
+        public async Task TestTVPWithAnonymousObjectAsync()
         {
             try
             {
-                connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                connection.Execute("CREATE PROC get_ints @integers int_list_type READONLY AS select * from @integers");
+                await connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
+                await connection.Execute("CREATE PROC get_ints @integers int_list_type READONLY AS select * from @integers");
 
-                var nums = connection.Query<int>("get_ints", new { integers = new IntCustomParam(new int[] { 1, 2, 3 }) }, commandType: CommandType.StoredProcedure).ToList();
+                var nums = await connection.Query<int>("get_ints", new { integers = new IntCustomParam(new int[] { 1, 2, 3 }) }, commandType: CommandType.StoredProcedure).ToList();
                 nums[0].IsEqualTo(1);
                 nums[1].IsEqualTo(2);
                 nums[2].IsEqualTo(3);
@@ -1432,11 +1434,11 @@ end");
             {
                 try
                 {
-                    connection.Execute("DROP PROC get_ints");
+                    connection.Execute("DROP PROC get_ints").Wait();
                 }
                 finally
                 {
-                    connection.Execute("DROP TYPE int_list_type");
+                    connection.Execute("DROP TYPE int_list_type").Wait();
                 }
             }
         }
@@ -1450,10 +1452,10 @@ end");
         {
             public int Id { get; set; }
         }
-        public void ParentChildIdentityAssociations()
+        public async Task ParentChildIdentityAssociationsAsync()
         {
             var lookup = new Dictionary<int, Parent>();
-            var parents = connection.Query<Parent, Child, Parent>(@"select 1 as [Id], 1 as [Id] union all select 1,2 union all select 2,3 union all select 1,4 union all select 3,5",
+            var parents = await connection.Query<Parent, Child, Parent>(@"select 1 as [Id], 1 as [Id] union all select 1,2 union all select 2,3 union all select 1,4 union all select 3,5",
                 (parent, child) =>
                 {
                     Parent found;
@@ -1488,12 +1490,12 @@ end");
             public GenericUriParser Foo { get; set; }
             public int Bar { get; set; }
         }
-        public void TestUnexpectedDataMessage()
+        public async Task TestUnexpectedDataMessageAsync()
         {
             string msg = null;
             try
             {
-                connection.Query<int>("select count(1) where 1 = @Foo", new WithBizarreData { Foo = new GenericUriParser(GenericUriParserOptions.Default), Bar = 23 }).First();
+                await connection.Query<int>("select count(1) where 1 = @Foo", new WithBizarreData { Foo = new GenericUriParser(GenericUriParserOptions.Default), Bar = 23 }).FirstAsync();
 
             }
             catch (Exception ex)
@@ -1502,9 +1504,9 @@ end");
             }
             msg.IsEqualTo("The member Foo of type System.GenericUriParser cannot be used as a parameter value");
         }
-        public void TestUnexpectedButFilteredDataMessage()
+        public async Task TestUnexpectedButFilteredDataMessageAsync()
         {
-            int i = connection.Query<int>("select @Bar", new WithBizarreData { Foo = new GenericUriParser(GenericUriParserOptions.Default), Bar = 23 }).Single();
+            int i = await connection.Query<int>("select @Bar", new WithBizarreData { Foo = new GenericUriParser(GenericUriParserOptions.Default), Bar = 23 }).SingleAsync();
 
             i.IsEqualTo(23);
         }
@@ -1514,44 +1516,44 @@ end");
             public char Value { get; set; }
             public char? ValueNullable { get; set; }
         }
-        public void TestCharInputAndOutput()
+        public async Task TestCharInputAndOutputAsync()
         {
             const char test = '〠';
-            char c = connection.Query<char>("select @c", new { c = test }).Single();
+            char c = await connection.Query<char>("select @c", new { c = test }).SingleAsync();
 
             c.IsEqualTo(test);
 
-            var obj = connection.Query<WithCharValue>("select @Value as Value", new WithCharValue { Value = c }).Single();
+            var obj = await connection.Query<WithCharValue>("select @Value as Value", new WithCharValue { Value = c }).SingleAsync();
 
             obj.Value.IsEqualTo(test);
         }
-        public void TestNullableCharInputAndOutputNonNull()
+        public async Task TestNullableCharInputAndOutputNonNullAsync()
         {
             char? test = '〠';
-            char? c = connection.Query<char?>("select @c", new { c = test }).Single();
+            char? c = await connection.Query<char?>("select @c", new { c = test }).SingleAsync();
 
             c.IsEqualTo(test);
 
-            var obj = connection.Query<WithCharValue>("select @ValueNullable as ValueNullable", new WithCharValue { ValueNullable = c }).Single();
+            var obj = await connection.Query<WithCharValue>("select @ValueNullable as ValueNullable", new WithCharValue { ValueNullable = c }).SingleAsync();
 
             obj.ValueNullable.IsEqualTo(test);
         }
-        public void TestNullableCharInputAndOutputNull()
+        public async Task TestNullableCharInputAndOutputNullAsync()
         {
             char? test = null;
-            char? c = connection.Query<char?>("select @c", new { c = test }).Single();
+            char? c = await connection.Query<char?>("select @c", new { c = test }).SingleAsync();
 
             c.IsEqualTo(test);
 
-            var obj = connection.Query<WithCharValue>("select @ValueNullable as ValueNullable", new WithCharValue { ValueNullable = c }).Single();
+            var obj = await connection.Query<WithCharValue>("select @ValueNullable as ValueNullable", new WithCharValue { ValueNullable = c }).SingleAsync();
 
             obj.ValueNullable.IsEqualTo(test);
         }
-        public void TestInvalidSplitCausesNiceError()
+        public async Task TestInvalidSplitCausesNiceErrorAsync()
         {
             try
             {
-                connection.Query<User, User, User>("select 1 A, 2 B, 3 C", (x, y) => x);
+                await connection.Query<User, User, User>("select 1 A, 2 B, 3 C", (x, y) => x);
             }
             catch (ArgumentException)
             {
@@ -1560,7 +1562,7 @@ end");
 
             try
             {
-                connection.Query<dynamic, dynamic, dynamic>("select 1 A, 2 B, 3 C", (x, y) => x);
+                await connection.Query<dynamic, dynamic, dynamic>("select 1 A, 2 B, 3 C", (x, y) => x);
             }
             catch (ArgumentException)
             {
@@ -1592,7 +1594,7 @@ end");
                 insert #Posts values(3, null, 'no ones post')
 
                 insert #Comments values(1, 1, 'Comment 1')";
-            connection.Execute(createSql);
+            await connection.Execute(createSql);
 
             var sql = @"SELECT p.* FROM #Posts p
 
@@ -1604,15 +1606,15 @@ Order by p.Id";
 
             var grid = await connection.QueryMultipleAsync(sql);
 
-            var post1 = grid.Read<Post>().ToList();
+            var post1 = await grid.Read<Post>().ToList();
 
-            var post2 = grid.Read<Post, User, Comment, Post>((post, user, comment) => { post.Owner = user; post.Comment = comment; return post; }).SingleOrDefault();
+            var post2 = await grid.Read<Post, User, Comment, Post>((post, user, comment) => { post.Owner = user; post.Comment = comment; return post; }).SingleOrDefaultAsync();
 
             post2.Comment.Id.IsEqualTo(1);
             post2.Owner.Id.IsEqualTo(99);
 
 
-            connection.Execute("drop table #Users drop table #Posts drop table #Comments");
+            await connection.Execute("drop table #Users drop table #Posts drop table #Comments");
         }
 
         public async Task TestReadDynamicWithGridReaderAsync()
@@ -1628,15 +1630,15 @@ Order by p.Id";
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')";
 
-            connection.Execute(createSql);
+            await connection.Execute(createSql);
 
             var sql = @"SELECT * FROM #Users ORDER BY Id
                         SELECT * FROM #Posts ORDER BY Id DESC";
 
             var grid = await connection.QueryMultipleAsync(sql);
 
-            var users = grid.Read().ToList();
-            var posts = grid.Read().ToList();
+            var users = await grid.Read().ToList();
+            var posts = await grid.Read().ToList();
 
             users.Count.IsEqualTo(2);
             posts.Count.IsEqualTo(3);
@@ -1644,15 +1646,15 @@ Order by p.Id";
             ((int)users.First().Id).IsEqualTo(2);
             ((int)posts.First().Id).IsEqualTo(3);
 
-            connection.Execute("drop table #Users drop table #Posts");
+            await connection.Execute("drop table #Users drop table #Posts");
         }
 
-        public void TestDynamicParamNullSupport()
+        public async Task TestDynamicParamNullSupportAsync()
         {
             var p = new DynamicParameters();
 
             p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-            connection.Execute("select @b = null", p);
+            await connection.Execute("select @b = null", p);
 
             p.Get<int?>("@b").IsNull();
         }
@@ -1670,33 +1672,33 @@ Order by p.Id";
 #pragma warning restore 0649
             public string Name { get; set; }
         }
-        public void TestMultiMapperIsNotConfusedWithUnorderedCols()
+        public async Task TestMultiMapperIsNotConfusedWithUnorderedColsAsync()
         {
-            var result = connection.Query<Foo1, Bar1, Tuple<Foo1, Bar1>>("select 1 as Id, 2 as BarId, 3 as BarId, 'a' as Name", (f, b) => Tuple.Create(f, b), splitOn: "BarId").First();
+            var result = await connection.Query<Foo1, Bar1, Tuple<Foo1, Bar1>>("select 1 as Id, 2 as BarId, 3 as BarId, 'a' as Name", (f, b) => Tuple.Create(f, b), splitOn: "BarId").FirstAsync();
 
             result.Item1.Id.IsEqualTo(1);
             result.Item1.BarId.IsEqualTo(2);
             result.Item2.BarId.IsEqualTo(3);
             result.Item2.Name.IsEqualTo("a");
         }
-        public void TestLinqBinaryToClass()
+        public async Task TestLinqBinaryToClassAsync()
         {
             byte[] orig = new byte[20];
             new Random(123456).NextBytes(orig);
             var input = new System.Data.Linq.Binary(orig);
 
-            var output = connection.Query<WithBinary>("select @input as [Value]", new { input }).First().Value;
+            var output = (await connection.Query<WithBinary>("select @input as [Value]", new { input }).FirstAsync()).Value;
 
             output.ToArray().IsSequenceEqualTo(orig);
         }
 
-        public void TestLinqBinaryRaw()
+        public async Task TestLinqBinaryRawAsync()
         {
             byte[] orig = new byte[20];
             new Random(123456).NextBytes(orig);
             var input = new System.Data.Linq.Binary(orig);
 
-            var output = connection.Query<System.Data.Linq.Binary>("select @input as [Value]", new { input }).First();
+            var output = await connection.Query<System.Data.Linq.Binary>("select @input as [Value]", new { input }).FirstAsync();
 
             output.ToArray().IsSequenceEqualTo(orig);
         }
@@ -1713,19 +1715,19 @@ Order by p.Id";
             private WithPrivateConstructor() { }
         }
 
-        public void TestWithNonPublicConstructor()
+        public async Task TestWithNonPublicConstructorAsync()
         {
-            var output = connection.Query<WithPrivateConstructor>("select 1 as Foo").First();
+            var output = await connection.Query<WithPrivateConstructor>("select 1 as Foo").FirstAsync();
             output.Foo.IsEqualTo(1);
         }
 
-        public void TestAppendingAnonClasses()
+        public async Task TestAppendingAnonClassesAsync()
         {
             DynamicParameters p = new DynamicParameters();
             p.AddDynamicParams(new { A = 1, B = 2 });
             p.AddDynamicParams(new { C = 3, D = 4 });
 
-            var result = connection.Query("select @A a,@B b,@C c,@D d", p).Single();
+            var result = await connection.Query("select @A a,@B b,@C c,@D d", p).SingleAsync();
 
             ((int)result.a).IsEqualTo(1);
             ((int)result.b).IsEqualTo(2);
@@ -1733,7 +1735,7 @@ Order by p.Id";
             ((int)result.d).IsEqualTo(4);
         }
 
-        public void TestAppendingADictionary()
+        public async Task TestAppendingADictionaryAsync()
         {
             var dictionary = new Dictionary<string, object>();
             dictionary.Add("A", 1);
@@ -1742,13 +1744,13 @@ Order by p.Id";
             DynamicParameters p = new DynamicParameters();
             p.AddDynamicParams(dictionary);
 
-            var result = connection.Query("select @A a, @B b", p).Single();
+            var result = await connection.Query("select @A a, @B b", p).SingleAsync();
 
             ((int)result.a).IsEqualTo(1);
             ((string)result.b).IsEqualTo("two");
         }
 
-        public void TestAppendingAnExpandoObject()
+        public async Task TestAppendingAnExpandoObjectAsync()
         {
             dynamic expando = new System.Dynamic.ExpandoObject();
             expando.A = 1;
@@ -1757,26 +1759,26 @@ Order by p.Id";
             DynamicParameters p = new DynamicParameters();
             p.AddDynamicParams(expando);
 
-            var result = connection.Query("select @A a, @B b", p).Single();
+            var result = await connection.Query("select @A a, @B b", p).SingleAsync();
 
             ((int)result.a).IsEqualTo(1);
             ((string)result.b).IsEqualTo("two");
         }
 
-        public void TestAppendingAList()
+        public async Task TestAppendingAListAsync()
         {
             DynamicParameters p = new DynamicParameters();
             var list = new int[] { 1, 2, 3 };
             p.AddDynamicParams(new { list });
 
-            var result = connection.Query<int>("select * from (select 1 A union all select 2 union all select 3) X where A in @list", p).ToList();
+            var result = await connection.Query<int>("select * from (select 1 A union all select 2 union all select 3) X where A in @list", p).ToList();
 
             result[0].IsEqualTo(1);
             result[1].IsEqualTo(2);
             result[2].IsEqualTo(3);
         }
 
-        public void TestAppendingAListAsDictionary()
+        public async Task TestAppendingAListAsDictionaryAsync()
         {
             DynamicParameters p = new DynamicParameters();
             var list = new int[] { 1, 2, 3 };
@@ -1784,56 +1786,56 @@ Order by p.Id";
             args.Add("ids", list);
             p.AddDynamicParams(args);
 
-            var result = connection.Query<int>("select * from (select 1 A union all select 2 union all select 3) X where A in @ids", p).ToList();
+            var result = await connection.Query<int>("select * from (select 1 A union all select 2 union all select 3) X where A in @ids", p).ToList();
 
             result[0].IsEqualTo(1);
             result[1].IsEqualTo(2);
             result[2].IsEqualTo(3);
         }
 
-        public void TestAppendingAListByName()
+        public async Task TestAppendingAListByNameAsync()
         {
             DynamicParameters p = new DynamicParameters();
             var list = new int[] { 1, 2, 3 };
             p.Add("ids", list);
 
-            var result = connection.Query<int>("select * from (select 1 A union all select 2 union all select 3) X where A in @ids", p).ToList();
+            var result = await connection.Query<int>("select * from (select 1 A union all select 2 union all select 3) X where A in @ids", p).ToList();
 
             result[0].IsEqualTo(1);
             result[1].IsEqualTo(2);
             result[2].IsEqualTo(3);
         }
 
-        public void TestUniqueIdentifier()
+        public async Task TestUniqueIdentifierAsync()
         {
             var guid = Guid.NewGuid();
-            var result = connection.Query<Guid>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).Single();
+            var result = await connection.Query<Guid>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).SingleAsync();
             result.IsEqualTo(guid);
         }
-        public void TestNullableUniqueIdentifierNonNull()
+        public async Task TestNullableUniqueIdentifierNonNullAsync()
         {
             Guid? guid = Guid.NewGuid();
-            var result = connection.Query<Guid?>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).Single();
+            var result = await connection.Query<Guid?>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).SingleAsync();
             result.IsEqualTo(guid);
         }
-        public void TestNullableUniqueIdentifierNull()
+        public async Task TestNullableUniqueIdentifierNullAsync()
         {
             Guid? guid = null;
-            var result = connection.Query<Guid?>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).Single();
+            var result = await connection.Query<Guid?>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).SingleAsync();
             result.IsEqualTo(guid);
         }
 
 
-        public void WorkDespiteHavingWrongStructColumnTypes()
+        public async Task WorkDespiteHavingWrongStructColumnTypesAsync()
         {
-            var hazInt = connection.Query<CanHazInt>("select cast(1 as bigint) Value").Single();
+            var hazInt = await connection.Query<CanHazInt>("select cast(1 as bigint) Value").SingleAsync();
             hazInt.Value.Equals(1);
         }
 
 
-        public void TestProcWithOutParameter()
+        public async Task TestProcWithOutParameterAsync()
         {
-            connection.Execute(
+            await connection.Execute(
                 @"CREATE PROCEDURE #TestProcWithOutParameter
         @ID int output,
         @Foo varchar(100),
@@ -1848,12 +1850,12 @@ Order by p.Id";
             };
             var args = new DynamicParameters(obj);
             args.Add("ID", 0, direction: ParameterDirection.Output);
-            connection.Execute("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
+            await connection.Execute("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
             args.Get<int>("ID").IsEqualTo(7);
         }
-        public void TestProcWithOutAndReturnParameter()
+        public async Task TestProcWithOutAndReturnParameterAsync()
         {
-            connection.Execute(
+            await connection.Execute(
                 @"CREATE PROCEDURE #TestProcWithOutAndReturnParameter
         @ID int output,
         @Foo varchar(100),
@@ -1870,7 +1872,7 @@ Order by p.Id";
             var args = new DynamicParameters(obj);
             args.Add("ID", 0, direction: ParameterDirection.Output);
             args.Add("result", 0, direction: ParameterDirection.ReturnValue);
-            connection.Execute("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
+            await connection.Execute("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
             args.Get<int>("ID").IsEqualTo(7);
             args.Get<int>("result").IsEqualTo(42);
         }
@@ -1878,57 +1880,57 @@ Order by p.Id";
         {
             public int Value { get; set; }
         }
-        public void TestInt16Usage()
+        public async Task TestInt16UsageAsync()
         {
-            connection.Query<short>("select cast(42 as smallint)").Single().IsEqualTo((short)42);
-            connection.Query<short?>("select cast(42 as smallint)").Single().IsEqualTo((short?)42);
-            connection.Query<short?>("select cast(null as smallint)").Single().IsEqualTo((short?)null);
+            (await connection.Query<short>("select cast(42 as smallint)").SingleAsync()).IsEqualTo((short)42);
+            (await connection.Query<short?>("select cast(42 as smallint)").SingleAsync()).IsEqualTo((short?)42);
+            (await connection.Query<short?>("select cast(null as smallint)").SingleAsync()).IsEqualTo((short?)null);
 
-            connection.Query<ShortEnum>("select cast(42 as smallint)").Single().IsEqualTo((ShortEnum)42);
-            connection.Query<ShortEnum?>("select cast(42 as smallint)").Single().IsEqualTo((ShortEnum?)42);
-            connection.Query<ShortEnum?>("select cast(null as smallint)").Single().IsEqualTo((ShortEnum?)null);
+            (await connection.Query<ShortEnum>("select cast(42 as smallint)").SingleAsync()).IsEqualTo((ShortEnum)42);
+            (await connection.Query<ShortEnum?>("select cast(42 as smallint)").SingleAsync()).IsEqualTo((ShortEnum?)42);
+            (await connection.Query<ShortEnum?>("select cast(null as smallint)").SingleAsync()).IsEqualTo((ShortEnum?)null);
 
             var row =
-                connection.Query<WithInt16Values>(
+                await connection.Query<WithInt16Values>(
                     "select cast(1 as smallint) as NonNullableInt16, cast(2 as smallint) as NullableInt16, cast(3 as smallint) as NonNullableInt16Enum, cast(4 as smallint) as NullableInt16Enum")
-                    .Single();
+                    .SingleAsync();
             row.NonNullableInt16.IsEqualTo((short)1);
             row.NullableInt16.IsEqualTo((short)2);
             row.NonNullableInt16Enum.IsEqualTo(ShortEnum.Three);
             row.NullableInt16Enum.IsEqualTo(ShortEnum.Four);
 
             row =
-    connection.Query<WithInt16Values>(
+    await connection.Query<WithInt16Values>(
         "select cast(5 as smallint) as NonNullableInt16, cast(null as smallint) as NullableInt16, cast(6 as smallint) as NonNullableInt16Enum, cast(null as smallint) as NullableInt16Enum")
-        .Single();
+        .SingleAsync();
             row.NonNullableInt16.IsEqualTo((short)5);
             row.NullableInt16.IsEqualTo((short?)null);
             row.NonNullableInt16Enum.IsEqualTo(ShortEnum.Six);
             row.NullableInt16Enum.IsEqualTo((ShortEnum?)null);
         }
-        public void TestInt32Usage()
+        public async Task TestInt32UsageAsync()
         {
-            connection.Query<int>("select cast(42 as int)").Single().IsEqualTo((int)42);
-            connection.Query<int?>("select cast(42 as int)").Single().IsEqualTo((int?)42);
-            connection.Query<int?>("select cast(null as int)").Single().IsEqualTo((int?)null);
+            (await connection.Query<int>("select cast(42 as int)").SingleAsync()).IsEqualTo((int)42);
+            (await connection.Query<int?>("select cast(42 as int)").SingleAsync()).IsEqualTo((int?)42);
+            (await connection.Query<int?>("select cast(null as int)").SingleAsync()).IsEqualTo((int?)null);
 
-            connection.Query<IntEnum>("select cast(42 as int)").Single().IsEqualTo((IntEnum)42);
-            connection.Query<IntEnum?>("select cast(42 as int)").Single().IsEqualTo((IntEnum?)42);
-            connection.Query<IntEnum?>("select cast(null as int)").Single().IsEqualTo((IntEnum?)null);
+            (await connection.Query<IntEnum>("select cast(42 as int)").SingleAsync()).IsEqualTo((IntEnum)42);
+            (await connection.Query<IntEnum?>("select cast(42 as int)").SingleAsync()).IsEqualTo((IntEnum?)42);
+            (await connection.Query<IntEnum?>("select cast(null as int)").SingleAsync()).IsEqualTo((IntEnum?)null);
 
             var row =
-                connection.Query<WithInt32Values>(
+                await connection.Query<WithInt32Values>(
                     "select cast(1 as int) as NonNullableInt32, cast(2 as int) as NullableInt32, cast(3 as int) as NonNullableInt32Enum, cast(4 as int) as NullableInt32Enum")
-                    .Single();
+                    .SingleAsync();
             row.NonNullableInt32.IsEqualTo((int)1);
             row.NullableInt32.IsEqualTo((int)2);
             row.NonNullableInt32Enum.IsEqualTo(IntEnum.Three);
             row.NullableInt32Enum.IsEqualTo(IntEnum.Four);
 
             row =
-    connection.Query<WithInt32Values>(
+    await connection.Query<WithInt32Values>(
         "select cast(5 as int) as NonNullableInt32, cast(null as int) as NullableInt32, cast(6 as int) as NonNullableInt32Enum, cast(null as int) as NullableInt32Enum")
-        .Single();
+        .SingleAsync();
             row.NonNullableInt32.IsEqualTo((int)5);
             row.NullableInt32.IsEqualTo((int?)null);
             row.NonNullableInt32Enum.IsEqualTo(IntEnum.Six);
@@ -1958,80 +1960,80 @@ Order by p.Id";
             Zero = 0, One = 1, Two = 2, Three = 3, Four = 4, Five = 5, Six = 6
         }
 
-        public void TestTransactionCommit()
+        public async Task TestTransactionCommitAsync()
         {
             try
             {
-                connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
+                await connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
 
                 using (var transaction = connection.BeginTransaction())
                 {
-                    connection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
+                    await connection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
 
                     transaction.Commit();
                 }
 
-                connection.Query<int>("select count(*) from #TransactionTest;").Single().IsEqualTo(1);
+                (await connection.Query<int>("select count(*) from #TransactionTest;").SingleAsync()).IsEqualTo(1);
             }
             finally
             {
-                connection.Execute("drop table #TransactionTest;");
+                connection.Execute("drop table #TransactionTest;").Wait();
             }
         }
 
-        public void TestTransactionRollback()
+        public async Task TestTransactionRollbackAsync()
         {
-            connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
+            await connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
 
             try
             {
                 using (var transaction = connection.BeginTransaction())
                 {
-                    connection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
+                    await connection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
 
                     transaction.Rollback();
                 }
 
-                connection.Query<int>("select count(*) from #TransactionTest;").Single().IsEqualTo(0);
+                (await connection.Query<int>("select count(*) from #TransactionTest;").SingleAsync()).IsEqualTo(0);
             }
             finally
             {
-                connection.Execute("drop table #TransactionTest;");
+                connection.Execute("drop table #TransactionTest;").Wait();
             }
         }
 
-        public void TestReaderWhenResultsChange()
+        public async Task TestReaderWhenResultsChangeAsync()
         {
             try
             {
                 
-                connection.Execute("create table #ResultsChange (X int);create table #ResultsChange2 (Y int);insert #ResultsChange (X) values(1);insert #ResultsChange2 (Y) values(1);");
+				await connection.Execute("create table #ResultsChange (X int);create table #ResultsChange2 (Y int);insert #ResultsChange (X) values(1);insert #ResultsChange2 (Y) values(1);");
 
                 var obj1 = connection.Query<ResultsChangeType>("select * from #ResultsChange").Single();
                 obj1.X.IsEqualTo(1);
                 obj1.Y.IsEqualTo(0);
                 obj1.Z.IsEqualTo(0);
 
-                var obj2 = connection.Query<ResultsChangeType>("select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X").Single();
+                var obj2 = await connection.Query<ResultsChangeType>("select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X").SingleAsync();
                 obj2.X.IsEqualTo(1);
                 obj2.Y.IsEqualTo(1);
                 obj2.Z.IsEqualTo(0);
 
-                connection.Execute("alter table #ResultsChange add Z int null");
-                connection.Execute("update #ResultsChange set Z = 2");
+                await connection.Execute("alter table #ResultsChange add Z int null");
+                await connection.Execute("update #ResultsChange set Z = 2");
 
-                var obj3 = connection.Query<ResultsChangeType>("select * from #ResultsChange").Single();
+                var obj3 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
                 obj3.X.IsEqualTo(1);
                 obj3.Y.IsEqualTo(0);
                 obj3.Z.IsEqualTo(2);
 
-                var obj4 = connection.Query<ResultsChangeType>("select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X").Single();
+                var obj4 = await connection.Query<ResultsChangeType>("select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X").SingleAsync();
                 obj4.X.IsEqualTo(1);
                 obj4.Y.IsEqualTo(1);
                 obj4.Z.IsEqualTo(2);
             } finally
             {
-                connection.Execute("drop table #ResultsChange;drop table #ResultsChange2;");
+                connection.Execute("drop table #ResultsChange;drop table #ResultsChange2;").Wait();
             }
         }
         class ResultsChangeType
@@ -2041,10 +2043,10 @@ Order by p.Id";
             public int Z { get; set; }
         }
 
-        public void TestCustomTypeMap()
+        public async Task TestCustomTypeMapAsync()
         {
             // default mapping
-            var item = connection.Query<TypeWithMapping>("Select 'AVal' as A, 'BVal' as B").Single();
+            var item = await connection.Query<TypeWithMapping>("Select 'AVal' as A, 'BVal' as B").SingleAsync();
             item.A.IsEqualTo("AVal");
             item.B.IsEqualTo("BVal");
 
@@ -2059,7 +2061,7 @@ Order by p.Id";
 
             // reset to default
             Dapper.SqlMapper.SetTypeMap(typeof(TypeWithMapping), null);
-            item = connection.Query<TypeWithMapping>("Select 'AVal' as A, 'BVal' as B").Single();
+            item = await connection.Query<TypeWithMapping>("Select 'AVal' as A, 'BVal' as B").SingleAsync();
             item.A.IsEqualTo("AVal");
             item.B.IsEqualTo("BVal");
         }
@@ -2081,30 +2083,30 @@ Order by p.Id";
             public bool D { get; set; }
         }
         
-        public void TestWrongTypes_WithRightTypes()
+        public async Task TestWrongTypes_WithRightTypesAsync()
         {
-            var item = connection.Query<WrongTypes>("select 1 as A, cast(2.0 as float) as B, cast(3 as bigint) as C, cast(1 as bit) as D").Single();
+            var item = await connection.Query<WrongTypes>("select 1 as A, cast(2.0 as float) as B, cast(3 as bigint) as C, cast(1 as bit) as D").SingleAsync();
             item.A.Equals(1);
             item.B.Equals(2.0);
             item.C.Equals(3L);
             item.D.Equals(true);
         }
         
-        public void TestWrongTypes_WithWrongTypes()
+        public async Task TestWrongTypes_WithWrongTypesAsync()
         {
-            var item = connection.Query<WrongTypes>("select cast(1.0 as float) as A, 2 as B, 3 as C, cast(1 as bigint) as D").Single();
+            var item = await connection.Query<WrongTypes>("select cast(1.0 as float) as A, 2 as B, 3 as C, cast(1 as bigint) as D").SingleAsync();
             item.A.Equals(1);
             item.B.Equals(2.0);
             item.C.Equals(3L);
             item.D.Equals(true);
         }
 
-        public void Test_AddDynamicParametersRepeatedShouldWork()
+        public async Task Test_AddDynamicParametersRepeatedShouldWorkAsync()
         {
             var args = new DynamicParameters();
             args.AddDynamicParams(new { Foo = 123 });
             args.AddDynamicParams(new { Foo = 123 });
-            int i = connection.Query<int>("select @Foo", args).Single();
+            int i = await connection.Query<int>("select @Foo", args).SingleAsync();
             i.IsEqualTo(123);
         }
 
@@ -2119,7 +2121,7 @@ Order by p.Id";
             }
         }
 
-        public void TestParameterWithIndexer()
+        public async Task TestParameterWithIndexerAsync()
         {
             connection.Execute(@"create proc #TestProcWithIndexer 
 	@A int
@@ -2127,12 +2129,12 @@ as
 begin
 	select @A
 end");
-            var item = connection.Query<int>("#TestProcWithIndexer", new ParameterWithIndexer(), commandType: CommandType.StoredProcedure).Single();
+            var item = await connection.Query<int>("#TestProcWithIndexer", new ParameterWithIndexer(), commandType: CommandType.StoredProcedure).SingleAsync();
         }
 
-        public void Issue_40_AutomaticBoolConversion()
+        public async Task Issue_40_AutomaticBoolConversionAsync()
         {
-            var user = connection.Query<Issue40_User>("select UserId=1,Email='abc',Password='changeme',Active=cast(1 as tinyint)").Single();
+            var user = await connection.Query<Issue40_User>("select UserId=1,Email='abc',Password='changeme',Active=cast(1 as tinyint)").SingleAsync();
             user.Active.IsTrue();
             user.UserID.IsEqualTo(1);
             user.Email.IsEqualTo("abc");
@@ -2157,11 +2159,11 @@ end");
             if (conn.State != ConnectionState.Closed) throw new InvalidOperationException("should be closed!");
             return conn;
         }
-        public void ExecuteFromClosed()
+        public async Task ExecuteFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
             {
-                conn.Execute("-- nop");
+                await conn.Execute("-- nop");
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
@@ -2173,12 +2175,12 @@ end");
         {
             public int Id { get; set; }
         }
-        public void QueryMultimapFromClosed()
+        public async Task QueryMultimapFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
             {
                 conn.State.IsEqualTo(ConnectionState.Closed);
-                var i = conn.Query<Multi1, Multi2, int>("select 2 as [Id], 3 as [Id]", (x, y) => x.Id + y.Id).Single();
+                var i = await conn.Query<Multi1, Multi2, int>("select 2 as [Id], 3 as [Id]", (x, y) => x.Id + y.Id).SingleAsync();
                 conn.State.IsEqualTo(ConnectionState.Closed);
                 i.IsEqualTo(5);
             }
@@ -2190,20 +2192,20 @@ end");
                 conn.State.IsEqualTo(ConnectionState.Closed);
                 using (var multi = await conn.QueryMultipleAsync("select 1 select 2 select 3"))
                 {
-                    multi.Read<int>().Single().IsEqualTo(1);
-                    multi.Read<int>().Single().IsEqualTo(2);
+                    (await multi.Read<int>().SingleAsync()).IsEqualTo(1);
+                    (await multi.Read<int>().SingleAsync()).IsEqualTo(2);
                     // not reading 3 is intentional here
                 }
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
-        public void ExecuteInvalidFromClosed()
+        public async Task ExecuteInvalidFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
             {
                 try
                 {
-                    conn.Execute("nop");
+                    await conn.Execute("nop");
                     false.IsEqualTo(true); // shouldn't have got here
                 }
                 catch
@@ -2212,22 +2214,22 @@ end");
                 }
             }
         }
-        public void QueryFromClosed()
+        public async Task QueryFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
             {
-                var i = conn.Query<int>("select 1").Single();
+                var i = await conn.Query<int>("select 1").SingleAsync();
                 conn.State.IsEqualTo(ConnectionState.Closed);
                 i.IsEqualTo(1);
             }
         }
-        public void QueryInvalidFromClosed()
+        public async Task QueryInvalidFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
             {
                 try
                 {
-                    conn.Query<int>("select gibberish").Single();
+                    await conn.Query<int>("select gibberish").SingleAsync();
                     false.IsEqualTo(true); // shouldn't have got here
                 }
                 catch
@@ -2242,8 +2244,8 @@ end");
             {
                 using (var multi = await conn.QueryMultipleAsync("select 1; select 'abc';"))
                 {
-                    multi.Read<int>().Single().IsEqualTo(1);
-                    multi.Read<string>().Single().IsEqualTo("abc");
+                    (await multi.Read<int>().SingleAsync()).IsEqualTo(1);
+                    (await multi.Read<string>().SingleAsync()).IsEqualTo("abc");
                 }
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
@@ -2268,10 +2270,10 @@ end");
         {
             using (var reader = await connection.QueryMultipleAsync("select 1; select 2 where 1 = 0; select 3 where 1 = 0; select 4;"))
             {
-                var one = reader.Read<int>().ToArray();
-                var two = reader.Read<int>().ToArray();
-                var three = reader.Read<int>().ToArray();
-                var four = reader.Read<int>().ToArray();
+                var one = await reader.Read<int>().ToArray();
+                var two = await reader.Read<int>().ToArray();
+                var three = await reader.Read<int>().ToArray();
+                var four = await reader.Read<int>().ToArray();
                 try { // only returned four grids; expect a fifth read to fail
                     reader.Read<int>();
                     throw new InvalidOperationException("this should not have worked!");
@@ -2317,16 +2319,16 @@ end");
             }
         }
 
-        public void TestIssue131()
+        public async Task TestIssue131Async()
         {
-            var results = connection.Query<dynamic, int, dynamic>(
+            var results = await connection.Query<dynamic, int, dynamic>(
                 "SELECT 1 Id, 'Mr' Title, 'John' Surname, 4 AddressCount",
                 (person, addressCount) =>
                 {
                     return person;
                 },
                 splitOn: "AddressCount"
-            ).FirstOrDefault();
+            ).FirstOrDefaultAsync();
 
             var asDict = (IDictionary<string, object>)results;
 
@@ -2337,22 +2339,22 @@ end");
         }
 
         // see http://stackoverflow.com/questions/13127886/dapper-returns-null-for-singleordefaultdatediff
-        public void TestNullFromInt_NoRows()
+        public async Task TestNullFromInt_NoRowsAsync()
         {
-            var result = connection.Query<int>( // case with rows
+            var result = await connection.Query<int>( // case with rows
              "select DATEDIFF(day, GETUTCDATE(), @date)", new { date = DateTime.UtcNow.AddDays(20) })
-             .SingleOrDefault();
+             .SingleOrDefaultAsync();
             result.IsEqualTo(20);
 
-            result = connection.Query<int>( // case without rows
+            result = await connection.Query<int>( // case without rows
                 "select DATEDIFF(day, GETUTCDATE(), @date) where 1 = 0", new { date = DateTime.UtcNow.AddDays(20) })
-                .SingleOrDefault();
+                .SingleOrDefaultAsync();
             result.IsEqualTo(0); // zero rows; default of int over zero rows is zero
 
 
         }
 
-		public void TestDapperTableMetadataRetrieval()
+		public async Task TestDapperTableMetadataRetrievalAsync()
 		{
 			// Test for a bug found in CS 51509960 where the following sequence would result in an InvalidOperationException being
 			// thrown due to an attempt to access a disposed of DataReader:
@@ -2360,13 +2362,13 @@ end");
 			// - Perform a dynamic query that yields no results
 			// - Add data to the source of that query
 			// - Perform a the same query again
-			connection.Execute("CREATE TABLE #sut (value varchar(10) NOT NULL PRIMARY KEY)");
-			connection.Query("SELECT value FROM #sut").IsSequenceEqualTo(Enumerable.Empty<dynamic>());
+			await connection.Execute("CREATE TABLE #sut (value varchar(10) NOT NULL PRIMARY KEY)");
+			(await connection.Query("SELECT value FROM #sut").ToList()).IsSequenceEqualTo(Enumerable.Empty<dynamic>());
 			
-			connection.Execute("INSERT INTO #sut (value) VALUES ('test')").IsEqualTo(1);
+			(await connection.Execute("INSERT INTO #sut (value) VALUES ('test')")).IsEqualTo(1);
 			var result = connection.Query("SELECT value FROM #sut");
 			
-			var first = result.First();
+			var first = await result.FirstAsync();
 			((string)first.value).IsEqualTo("test");
 		}
 

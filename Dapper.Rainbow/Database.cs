@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using System.Web;
 using System.Data;
@@ -41,7 +42,7 @@ namespace Dapper
             {
                 get
                 {
-                    tableName = tableName ?? database.DetermineTableName<T>(likelyTableName);
+                    tableName = tableName ?? database.DetermineTableNameAsync<T>(likelyTableName).Result;
                     return tableName;
                 }
             }
@@ -51,7 +52,7 @@ namespace Dapper
             /// </summary>
             /// <param name="data">Either DynamicParameters or an anonymous type or concrete type</param>
             /// <returns></returns>
-            public virtual int? Insert(dynamic data)
+            public virtual async Task<int?> Insert(dynamic data)
             {
                 var o = (object)data;
                 List<string> paramNames = GetParamNames(o);
@@ -61,7 +62,7 @@ namespace Dapper
                 string cols_params = string.Join(",", paramNames.Select(p => "@" + p));
                 var sql = "set nocount on insert " + TableName + " (" + cols + ") values (" + cols_params + ") select cast(scope_identity() as int)";
 
-                return database.Query<int?>(sql, o).Single();
+                return await database.Query<int?>(sql, o).SingleAsync();
             }
 
             /// <summary>
@@ -70,7 +71,7 @@ namespace Dapper
             /// <param name="id"></param>
             /// <param name="data"></param>
             /// <returns></returns>
-            public int Update(TId id, dynamic data)
+            public async Task<int> Update(TId id, dynamic data)
             {
                 List<string> paramNames = GetParamNames((object)data);
 
@@ -82,7 +83,7 @@ namespace Dapper
                 DynamicParameters parameters = new DynamicParameters(data);
                 parameters.Add("Id", id);
 
-                return database.Execute(builder.ToString(), parameters);
+                return await database.ExecuteAsync(builder.ToString(), parameters);
             }
 
             /// <summary>
@@ -90,9 +91,9 @@ namespace Dapper
             /// </summary>
             /// <param name="id"></param>
             /// <returns></returns>
-            public bool Delete(TId id)
+            public async Task<bool> Delete(TId id)
             {
-                return database.Execute("delete from " + TableName + " where Id = @id", new { id }) > 0;
+                return await database.ExecuteAsync("delete from " + TableName + " where Id = @id", new { id }) > 0;
             }
 
             /// <summary>
@@ -100,17 +101,17 @@ namespace Dapper
             /// </summary>
             /// <param name="id"></param>
             /// <returns></returns>
-            public T Get(TId id)
+            public async Task<T> Get(TId id)
             {
-                return database.Query<T>("select * from " + TableName + " where Id = @id", new { id }).FirstOrDefault();
+                return await database.Query<T>("select * from " + TableName + " where Id = @id", new { id }).FirstOrDefaultAsync();
             }
 
-            public virtual T First()
+            public virtual async Task<T> First()
             {
-                return database.Query<T>("select top 1 * from " + TableName).FirstOrDefault();
+                return await database.Query<T>("select top 1 * from " + TableName).FirstOrDefaultAsync();
             }
 
-            public IEnumerable<T> All()
+			public IObservable<T> All()
             {
                 return database.Query<T>("select * from " + TableName);
             }
@@ -240,14 +241,14 @@ namespace Dapper
         }
 
         static ConcurrentDictionary<Type, string> tableNameMap = new ConcurrentDictionary<Type, string>();
-        private string DetermineTableName<T>(string likelyTableName)
+        private async Task<string> DetermineTableNameAsync<T>(string likelyTableName)
         {
             string name;
 
             if (!tableNameMap.TryGetValue(typeof(T), out name))
             {
                 name = likelyTableName;
-                if (!TableExists(name))
+                if (!(await TableExistsAsync(name)))
                 {
                     name = "[" + typeof(T).Name + "]";
                 }
@@ -257,7 +258,7 @@ namespace Dapper
             return name;
         }
 
-        private bool TableExists(string name)
+        private async Task<bool> TableExistsAsync(string name)
         {
             string schemaName = null;
 
@@ -278,42 +279,42 @@ namespace Dapper
             if (!String.IsNullOrEmpty(schemaName)) builder.Append("TABLE_SCHEMA = @schemaName AND ");
             builder.Append("TABLE_NAME = @name");
 
-            return connection.Query(builder.ToString(), new { schemaName, name }, transaction: transaction).Count() == 1;
+            return (await connection.Query(builder.ToString(), new { schemaName, name }, transaction: transaction).Count()) == 1;
         }
 
-        public int Execute(string sql, dynamic param = null)
+        public async Task<int> ExecuteAsync(string sql, dynamic param = null)
         {
-            return SqlMapper.Execute(connection, sql, param as object, transaction, commandTimeout: this.commandTimeout);
+            return await SqlMapper.Execute(connection, sql, param as object, transaction, commandTimeout: this.commandTimeout);
         }
 
-        public IEnumerable<T> Query<T>(string sql, dynamic param = null, bool buffered = true)
+		public IObservable<T> Query<T>(string sql, dynamic param = null, bool buffered = true)
         {
-            return SqlMapper.Query<T>(connection, sql, param as object, transaction, buffered, commandTimeout);
+            return SqlMapper.Query<T>(connection, sql, param as object, transaction, commandTimeout);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TReturn>(string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+		public IObservable<TReturn> Query<TFirst, TSecond, TReturn>(string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
-            return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
+            return SqlMapper.Query(connection, sql, map, param as object, transaction, splitOn);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+		public IObservable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
-            return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
+            return SqlMapper.Query(connection, sql, map, param as object, transaction, splitOn);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+		public IObservable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
-            return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
+            return SqlMapper.Query(connection, sql, map, param as object, transaction, splitOn);
         }
 
-        public IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
+        public IObservable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null)
         {
-            return SqlMapper.Query(connection, sql, map, param as object, transaction, buffered, splitOn);
+            return SqlMapper.Query(connection, sql, map, param as object, transaction, splitOn);
         }
 
-        public IEnumerable<dynamic> Query(string sql, dynamic param = null, bool buffered = true)
+		public IObservable<dynamic> Query(string sql, dynamic param = null, bool buffered = true)
         {
-            return SqlMapper.Query(connection, sql, param as object, transaction, buffered);
+            return SqlMapper.Query(connection, sql, param as object, transaction);
         }
 
         public async Task<Dapper.SqlMapper.GridReader> QueryMultipleAsync(string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null)
