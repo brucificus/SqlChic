@@ -787,15 +787,15 @@ Order by p.Id
         {
             using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
             {
-                var a = grid.Read<int>();
-                var b = grid.Read<int>();
-                var c = grid.Read<int>();
-                var d = grid.Read<int>();
+				var a = grid.Read<int>();
+				var b = grid.Read<int>();
+				var c = grid.Read<int>();
+				var d = grid.Read<int>();
 
-                (await a.SingleAsync()).Equals(1);
-                (await b.SingleAsync()).Equals(2);
-                (await c.SingleAsync()).Equals(3);
-                (await d.SingleAsync()).Equals(4);
+				(await a.SingleAsync()).IsEqualTo(1);
+				(await b.SingleAsync()).IsEqualTo(2);
+				(await c.SingleAsync()).IsEqualTo(3);
+				(await d.SingleAsync()).IsEqualTo(4);
             }
         }
 
@@ -813,7 +813,6 @@ Order by p.Id
                 {
                     // that's expected
                 }
-                
             }
         }
         public async Task TestQueryMultipleAsyncNonBufferedCcorrectOrder()
@@ -825,10 +824,10 @@ Order by p.Id
                 var c = await grid.Read<int>().SingleAsync();
                 var d = await grid.Read<int>().SingleAsync();
 
-                a.Equals(1);
-                b.Equals(2);
-                c.Equals(3);
-                d.Equals(4);
+				a.IsEqualTo(1);
+				b.IsEqualTo(2);
+				c.IsEqualTo(3);
+				d.IsEqualTo(4);
             }
         }
         public async Task TestMultiMapDynamicAsync()
@@ -1832,7 +1831,7 @@ Order by p.Id";
         public async Task WorkDespiteHavingWrongStructColumnTypesAsync()
         {
             var hazInt = await connection.Query<CanHazInt>("select cast(1 as bigint) Value").SingleAsync();
-            hazInt.Value.Equals(1);
+			hazInt.Value.IsEqualTo(1);
         }
 
 
@@ -2089,19 +2088,19 @@ Order by p.Id";
         public async Task TestWrongTypes_WithRightTypesAsync()
         {
             var item = await connection.Query<WrongTypes>("select 1 as A, cast(2.0 as float) as B, cast(3 as bigint) as C, cast(1 as bit) as D").SingleAsync();
-            item.A.Equals(1);
-            item.B.Equals(2.0);
-            item.C.Equals(3L);
-            item.D.Equals(true);
+			item.A.IsEqualTo(1);
+			item.B.IsEqualTo(2.0);
+			item.C.IsEqualTo(3L);
+			item.D.IsEqualTo(true);
         }
         
         public async Task TestWrongTypes_WithWrongTypesAsync()
         {
             var item = await connection.Query<WrongTypes>("select cast(1.0 as float) as A, 2 as B, 3 as C, cast(1 as bigint) as D").SingleAsync();
-            item.A.Equals(1);
-            item.B.Equals(2.0);
-            item.C.Equals(3L);
-            item.D.Equals(true);
+			item.A.IsEqualTo(1);
+			item.B.IsEqualTo(2.0);
+			item.C.IsEqualTo(3L);
+			item.D.IsEqualTo(true);
         }
 
         public async Task Test_AddDynamicParametersRepeatedShouldWorkAsync()
