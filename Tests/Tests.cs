@@ -406,7 +406,7 @@ WHERE (first_name LIKE {0} OR last_name LIKE {0});";
             string query = String.Format(formatted, allow_start_wildcards ? use_both : use_end_only);
             string term = "F"; // the term the user searched for
 
-            connection.Execute(@"create table #users16726709 (first_name varchar(200), last_name varchar(200))
+            await connection.Execute(@"create table #users16726709 (first_name varchar(200), last_name varchar(200))
 insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('Tony','Farcus') insert #users16726709 values ('Albert','Tenof')");
 
             // Using Dapper
@@ -544,7 +544,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
         public async Task TestExecuteMultipleCommandAsync()
         {
-            connection.Execute("create table #t(i int)");
+            await connection.Execute("create table #t(i int)");
             int tally = await connection.Execute(@"insert #t (i) values(@a)", new[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
             int sum = await connection.Query<int>("select sum(i) from #t drop table #t").FirstAsync();
             tally.IsEqualTo(4);
@@ -776,7 +776,7 @@ Order by p.Id
                 data[2].Owner.IsNull();
             }
 
-            connection.Execute("drop table #Users drop table #Posts");
+            await connection.Execute("drop table #Users drop table #Posts");
 
         }
 
@@ -2009,7 +2009,7 @@ Order by p.Id";
                 
 				await connection.Execute("create table #ResultsChange (X int);create table #ResultsChange2 (Y int);insert #ResultsChange (X) values(1);insert #ResultsChange2 (Y) values(1);");
 
-                var obj1 = connection.Query<ResultsChangeType>("select * from #ResultsChange").Single();
+                var obj1 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
                 obj1.X.IsEqualTo(1);
                 obj1.Y.IsEqualTo(0);
                 obj1.Z.IsEqualTo(0);
@@ -2055,7 +2055,7 @@ Order by p.Id";
                 (type, columnName) => type.GetProperties().Where(prop => prop.GetCustomAttributes(false).OfType<DescriptionAttribute>().Any(attr => attr.Description == columnName)).FirstOrDefault());
             Dapper.SqlMapper.SetTypeMap(typeof(TypeWithMapping), map);
 
-            item = connection.Query<TypeWithMapping>("Select 'AVal' as A, 'BVal' as B").Single();
+            item = await connection.Query<TypeWithMapping>("Select 'AVal' as A, 'BVal' as B").SingleAsync();
             item.A.IsEqualTo("BVal");
             item.B.IsEqualTo("AVal");
 
@@ -2123,7 +2123,7 @@ Order by p.Id";
 
         public async Task TestParameterWithIndexerAsync()
         {
-            connection.Execute(@"create proc #TestProcWithIndexer 
+            await connection.Execute(@"create proc #TestProcWithIndexer 
 	@A int
 as 
 begin
@@ -2275,7 +2275,7 @@ end");
                 var three = await reader.Read<int>().ToArray();
                 var four = await reader.Read<int>().ToArray();
                 try { // only returned four grids; expect a fifth read to fail
-                    reader.Read<int>();
+                    await reader.Read<int>();
                     throw new InvalidOperationException("this should not have worked!");
                 }
                 catch (ObjectDisposedException ex) { // expected; success
@@ -2291,9 +2291,9 @@ end");
             }
         }
 
-        public void TestDynamicMutation()
+        public async Task TestDynamicMutation()
         {
-            var obj = connection.Query("select 1 as [a], 2 as [b], 3 as [c]").Single();
+            var obj = await connection.Query("select 1 as [a], 2 as [b], 3 as [c]").SingleAsync();
             ((int)obj.a).IsEqualTo(1);
             IDictionary<string,object> dict = obj;
             Assert.Equals(3, dict.Count);
