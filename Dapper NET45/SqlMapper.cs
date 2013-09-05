@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
@@ -542,7 +543,7 @@ namespace Dapper
         /// Execute parameterized SQL  
         /// </summary>
         /// <returns>Number of rows affected</returns>
-        public static int Execute(
+        public static async Task<int> Execute(
 this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
 )
         {
@@ -572,7 +573,7 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
                             cmd.Parameters.Clear(); // current code is Add-tastic
                         }
                         info.ParamReader(cmd, obj);
-                        total += cmd.ExecuteNonQuery();
+                        total += await cmd.ExecuteNonQueryAsync();
                     }
                 }
                 return total;
@@ -584,14 +585,14 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
                 identity = new Identity(sql, commandType, cnn, null, (object)param == null ? null : ((object)param).GetType(), null);
                 info = GetCacheInfo(identity);
             }
-            return ExecuteCommand(cnn, transaction, sql, (object)param == null ? null : info.ParamReader, (object)param, commandTimeout, commandType);
+            return await ExecuteCommandAsync(cnn, transaction, sql, (object)param == null ? null : info.ParamReader, (object)param, commandTimeout, commandType);
         }
         /// <summary>
         /// Return a list of dynamic objects, reader is closed after the call
         /// </summary>
-        public static IEnumerable<dynamic> Query(this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, bool buffered = true, int? commandTimeout = null, CommandType? commandType = null)
+        public static IObservable<dynamic> Query(this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null)
         {
-            return Query<DapperRow>(cnn, sql, param as object, transaction, buffered, commandTimeout, commandType);
+            return Query<DapperRow>(cnn, sql, param as object, transaction, commandTimeout, commandType);
         }
 
         /// <summary>
@@ -601,12 +602,12 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
         /// <returns>A sequence of data of the supplied type; if a basic type (int, string, etc) is queried then the data from the first column in assumed, otherwise an instance is
         /// created per row, and a direct column-name===member-name mapping is assumed (case insensitive).
         /// </returns>
-        public static IEnumerable<T> Query<T>(
-this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, bool buffered = true, int? commandTimeout = null, CommandType? commandType = null
+        public static IObservable<T> Query<T>(
+this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
 )
         {
             var data = QueryInternal<T>(cnn, sql, param as object, transaction, commandTimeout, commandType);
-            return buffered ? data.ToList() : data;
+	        return data;
         }
 
         /// <summary>
@@ -624,7 +625,7 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
             bool wasClosed = cnn.State == ConnectionState.Closed;
             try
             {
-                if (wasClosed) cnn.Open();
+                if (wasClosed) await cnn.OpenAsync();
                 cmd = SetupCommand(cnn, transaction, sql, info.ParamReader, (object)param, commandTimeout, commandType);
                 reader = await cmd.ExecuteReaderAsync(wasClosed ? CommandBehavior.CloseConnection : CommandBehavior.Default);
 
@@ -652,276 +653,276 @@ this DbConnection cnn, string sql, dynamic param = null, DbTransaction transacti
         /// <summary>
         /// Return a typed list of objects, reader is closed after the call
         /// </summary>
-        private static IEnumerable<T> QueryInternal<T>(this DbConnection cnn, string sql, object param, DbTransaction transaction, int? commandTimeout, CommandType? commandType)
+        private static IObservable<T> QueryInternal<T>(this DbConnection cnn, string sql, object param, DbTransaction transaction, int? commandTimeout, CommandType? commandType)
         {
-            var identity = new Identity(sql, commandType, cnn, typeof(T), param == null ? null : param.GetType(), null);
-            var info = GetCacheInfo(identity);
+	        return Observable.Create<T>(async observer =>
+		        {
+					var identity = new Identity(sql, commandType, cnn, typeof(T), param == null ? null : param.GetType(), null);
+					var info = GetCacheInfo(identity);
 
-            DbCommand cmd = null;
-            DbDataReader reader = null;
+					DbCommand cmd = null;
+					DbDataReader reader = null;
 
-            bool wasClosed = cnn.State == ConnectionState.Closed;
-            try
-            {
-                cmd = SetupCommand(cnn, transaction, sql, info.ParamReader, param, commandTimeout, commandType);
+					bool wasClosed = cnn.State == ConnectionState.Closed;
+					try
+					{
+						cmd = SetupCommand(cnn, transaction, sql, info.ParamReader, param, commandTimeout, commandType);
 
-                if (wasClosed) cnn.Open();
-                reader = cmd.ExecuteReader(wasClosed ? CommandBehavior.CloseConnection : CommandBehavior.Default);
-                wasClosed = false; // *if* the connection was closed and we got this far, then we now have a reader
-                // with the CloseConnection flag, so the reader will deal with the connection; we
-                // still need something in the "finally" to ensure that broken SQL still results
-                // in the connection closing itself
-                var tuple = info.Deserializer;
-                int hash = GetColumnHash(reader);
-                if (tuple.Func == null || tuple.Hash != hash)
-                {
-                    tuple = info.Deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
-                    SetQueryCache(identity, info);
-                }
+						if (wasClosed) await cnn.OpenAsync();
+						reader = await cmd.ExecuteReaderAsync(wasClosed ? CommandBehavior.CloseConnection : CommandBehavior.Default);
+						wasClosed = false; // *if* the connection was closed and we got this far, then we now have a reader
+						// with the CloseConnection flag, so the reader will deal with the connection; we
+						// still need something in the "finally" to ensure that broken SQL still results
+						// in the connection closing itself
+						var tuple = info.Deserializer;
+						int hash = GetColumnHash(reader);
+						if (tuple.Func == null || tuple.Hash != hash)
+						{
+							tuple = info.Deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
+							SetQueryCache(identity, info);
+						}
 
-                var func = tuple.Func;
+						var func = tuple.Func;
 
-                while (reader.Read())
-                {
-                    yield return (T)func(reader);
-                }
-                // happy path; close the reader cleanly - no
-                // need for "Cancel" etc
-                reader.Dispose();
-                reader = null;
-            }
-            finally
-            {
-                if (reader != null)
-                {
-                    if (!reader.IsClosed) try { cmd.Cancel(); }
-                        catch { /* don't spoil the existing exception */ }
-                    reader.Dispose();
-                }
-                if (wasClosed) cnn.Close();
-                if (cmd != null) cmd.Dispose();
-            }
+						while (await reader.ReadAsync())
+						{
+							observer.OnNext((T)func(reader));
+						}
+						// happy path; close the reader cleanly - no
+						// need for "Cancel" etc
+						reader.Dispose();
+						reader = null;
+					}
+					finally
+					{
+						if (reader != null)
+						{
+							if (!reader.IsClosed) try { cmd.Cancel(); }
+								catch { /* don't spoil the existing exception */ }
+							reader.Dispose();
+						}
+						if (wasClosed) cnn.Close();
+						if (cmd != null) cmd.Dispose();
+					}
+		        }).Publish().RefCount();
         }
 
-        /// <summary>
-        /// Maps a query to objects
-        /// </summary>
-        /// <typeparam name="TFirst">The first type in the recordset</typeparam>
-        /// <typeparam name="TSecond">The second type in the recordset</typeparam>
-        /// <typeparam name="TReturn">The return type</typeparam>
-        /// <param name="cnn"></param>
-        /// <param name="sql"></param>
-        /// <param name="map"></param>
-        /// <param name="param"></param>
-        /// <param name="transaction"></param>
-        /// <param name="buffered"></param>
-        /// <param name="splitOn">The Field we should split and read the second object from (default: id)</param>
-        /// <param name="commandTimeout">Number of seconds before command execution timeout</param>
-        /// <param name="commandType">Is it a stored proc or a batch?</param>
-        /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TReturn>(
-this DbConnection cnn, string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+	    /// <summary>
+	    /// Maps a query to objects
+	    /// </summary>
+	    /// <typeparam name="TFirst">The first type in the recordset</typeparam>
+	    /// <typeparam name="TSecond">The second type in the recordset</typeparam>
+	    /// <typeparam name="TReturn">The return type</typeparam>
+	    /// <param name="cnn"></param>
+	    /// <param name="sql"></param>
+	    /// <param name="map"></param>
+	    /// <param name="param"></param>
+	    /// <param name="transaction"></param>
+	    /// <param name="splitOn">The Field we should split and read the second object from (default: id)</param>
+	    /// <param name="commandTimeout">Number of seconds before command execution timeout</param>
+	    /// <param name="commandType">Is it a stored proc or a batch?</param>
+	    /// <returns></returns>
+	    public static IObservable<TReturn> Query<TFirst, TSecond, TReturn>(
+this DbConnection cnn, string sql, Func<TFirst, TSecond, TReturn> map, dynamic param = null, DbTransaction transaction = null, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
-            return MultiMap<TFirst, TSecond, DontMap, DontMap, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
+            return MultiMap<TFirst, TSecond, DontMap, DontMap, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, splitOn, commandTimeout, commandType);
         }
 
-        /// <summary>
-        /// Maps a query to objects
-        /// </summary>
-        /// <typeparam name="TFirst"></typeparam>
-        /// <typeparam name="TSecond"></typeparam>
-        /// <typeparam name="TThird"></typeparam>
-        /// <typeparam name="TReturn"></typeparam>
-        /// <param name="cnn"></param>
-        /// <param name="sql"></param>
-        /// <param name="map"></param>
-        /// <param name="param"></param>
-        /// <param name="transaction"></param>
-        /// <param name="buffered"></param>
-        /// <param name="splitOn">The Field we should split and read the second object from (default: id)</param>
-        /// <param name="commandTimeout">Number of seconds before command execution timeout</param>
-        /// <param name="commandType"></param>
-        /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(
-this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+	    /// <summary>
+	    /// Maps a query to objects
+	    /// </summary>
+	    /// <typeparam name="TFirst"></typeparam>
+	    /// <typeparam name="TSecond"></typeparam>
+	    /// <typeparam name="TThird"></typeparam>
+	    /// <typeparam name="TReturn"></typeparam>
+	    /// <param name="cnn"></param>
+	    /// <param name="sql"></param>
+	    /// <param name="map"></param>
+	    /// <param name="param"></param>
+	    /// <param name="transaction"></param>
+	    /// <param name="splitOn">The Field we should split and read the second object from (default: id)</param>
+	    /// <param name="commandTimeout">Number of seconds before command execution timeout</param>
+	    /// <param name="commandType"></param>
+	    /// <returns></returns>
+	    public static IObservable<TReturn> Query<TFirst, TSecond, TThird, TReturn>(
+this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TReturn> map, dynamic param = null, DbTransaction transaction = null, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
-            return MultiMap<TFirst, TSecond, TThird, DontMap, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
+            return MultiMap<TFirst, TSecond, TThird, DontMap, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, splitOn, commandTimeout, commandType);
         }
 
-        /// <summary>
-        /// Perform a multi mapping query with 4 input parameters
-        /// </summary>
-        /// <typeparam name="TFirst"></typeparam>
-        /// <typeparam name="TSecond"></typeparam>
-        /// <typeparam name="TThird"></typeparam>
-        /// <typeparam name="TFourth"></typeparam>
-        /// <typeparam name="TReturn"></typeparam>
-        /// <param name="cnn"></param>
-        /// <param name="sql"></param>
-        /// <param name="map"></param>
-        /// <param name="param"></param>
-        /// <param name="transaction"></param>
-        /// <param name="buffered"></param>
-        /// <param name="splitOn"></param>
-        /// <param name="commandTimeout"></param>
-        /// <param name="commandType"></param>
-        /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(
-this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+	    /// <summary>
+	    /// Perform a multi mapping query with 4 input parameters
+	    /// </summary>
+	    /// <typeparam name="TFirst"></typeparam>
+	    /// <typeparam name="TSecond"></typeparam>
+	    /// <typeparam name="TThird"></typeparam>
+	    /// <typeparam name="TFourth"></typeparam>
+	    /// <typeparam name="TReturn"></typeparam>
+	    /// <param name="cnn"></param>
+	    /// <param name="sql"></param>
+	    /// <param name="map"></param>
+	    /// <param name="param"></param>
+	    /// <param name="transaction"></param>
+	    /// <param name="splitOn"></param>
+	    /// <param name="commandTimeout"></param>
+	    /// <param name="commandType"></param>
+	    /// <returns></returns>
+	    public static IObservable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TReturn>(
+this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, dynamic param = null, DbTransaction transaction = null, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
-            return MultiMap<TFirst, TSecond, TThird, TFourth, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
+            return MultiMap<TFirst, TSecond, TThird, TFourth, DontMap, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, splitOn, commandTimeout, commandType);
         }
 
-        /// <summary>
-        /// Perform a multi mapping query with 5 input parameters
-        /// </summary>
-        /// <typeparam name="TFirst"></typeparam>
-        /// <typeparam name="TSecond"></typeparam>
-        /// <typeparam name="TThird"></typeparam>
-        /// <typeparam name="TFourth"></typeparam>
-        /// <typeparam name="TFifth"></typeparam>
-        /// <typeparam name="TReturn"></typeparam>
-        /// <param name="cnn"></param>
-        /// <param name="sql"></param>
-        /// <param name="map"></param>
-        /// <param name="param"></param>
-        /// <param name="transaction"></param>
-        /// <param name="buffered"></param>
-        /// <param name="splitOn"></param>
-        /// <param name="commandTimeout"></param>
-        /// <param name="commandType"></param>
-        /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(
-            this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+	    /// <summary>
+	    /// Perform a multi mapping query with 5 input parameters
+	    /// </summary>
+	    /// <typeparam name="TFirst"></typeparam>
+	    /// <typeparam name="TSecond"></typeparam>
+	    /// <typeparam name="TThird"></typeparam>
+	    /// <typeparam name="TFourth"></typeparam>
+	    /// <typeparam name="TFifth"></typeparam>
+	    /// <typeparam name="TReturn"></typeparam>
+	    /// <param name="cnn"></param>
+	    /// <param name="sql"></param>
+	    /// <param name="map"></param>
+	    /// <param name="param"></param>
+	    /// <param name="transaction"></param>
+	    /// <param name="splitOn"></param>
+	    /// <param name="commandTimeout"></param>
+	    /// <param name="commandType"></param>
+	    /// <returns></returns>
+	    public static IObservable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(
+            this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, dynamic param = null, DbTransaction transaction = null, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
-            return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
+            return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, DontMap, DontMap, TReturn>(cnn, sql, map, param as object, transaction, splitOn, commandTimeout, commandType);
         }
 
-        /// <summary>
-        /// Perform a multi mapping query with 6 input parameters
-        /// </summary>
-        /// <typeparam name="TFirst"></typeparam>
-        /// <typeparam name="TSecond"></typeparam>
-        /// <typeparam name="TThird"></typeparam>
-        /// <typeparam name="TFourth"></typeparam>
-        /// <typeparam name="TFifth"></typeparam>
-        /// <typeparam name="TSixth"></typeparam>
-        /// <typeparam name="TReturn"></typeparam>
-        /// <param name="cnn"></param>
-        /// <param name="sql"></param>
-        /// <param name="map"></param>
-        /// <param name="param"></param>
-        /// <param name="transaction"></param>
-        /// <param name="buffered"></param>
-        /// <param name="splitOn"></param>
-        /// <param name="commandTimeout"></param>
-        /// <param name="commandType"></param>
-        /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(
-            this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
+	    /// <summary>
+	    /// Perform a multi mapping query with 6 input parameters
+	    /// </summary>
+	    /// <typeparam name="TFirst"></typeparam>
+	    /// <typeparam name="TSecond"></typeparam>
+	    /// <typeparam name="TThird"></typeparam>
+	    /// <typeparam name="TFourth"></typeparam>
+	    /// <typeparam name="TFifth"></typeparam>
+	    /// <typeparam name="TSixth"></typeparam>
+	    /// <typeparam name="TReturn"></typeparam>
+	    /// <param name="cnn"></param>
+	    /// <param name="sql"></param>
+	    /// <param name="map"></param>
+	    /// <param name="param"></param>
+	    /// <param name="transaction"></param>
+	    /// <param name="splitOn"></param>
+	    /// <param name="commandTimeout"></param>
+	    /// <param name="commandType"></param>
+	    /// <returns></returns>
+	    public static IObservable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(
+            this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> map, dynamic param = null, DbTransaction transaction = null, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null
 )
         {
-            return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, DontMap, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
+            return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, DontMap, TReturn>(cnn, sql, map, param as object, transaction, splitOn, commandTimeout, commandType);
         }
 
 
-        /// <summary>
-        /// Perform a multi mapping query with 7 input parameters
-        /// </summary>
-        /// <typeparam name="TFirst"></typeparam>
-        /// <typeparam name="TSecond"></typeparam>
-        /// <typeparam name="TThird"></typeparam>
-        /// <typeparam name="TFourth"></typeparam>
-        /// <typeparam name="TFifth"></typeparam>
-        /// <typeparam name="TSixth"></typeparam>
-        /// <typeparam name="TSeventh"></typeparam>
-        /// <typeparam name="TReturn"></typeparam>
-        /// <param name="cnn"></param>
-        /// <param name="sql"></param>
-        /// <param name="map"></param>
-        /// <param name="param"></param>
-        /// <param name="transaction"></param>
-        /// <param name="buffered"></param>
-        /// <param name="splitOn"></param>
-        /// <param name="commandTimeout"></param>
-        /// <param name="commandType"></param>
-        /// <returns></returns>
-        public static IEnumerable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> map, dynamic param = null, DbTransaction transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null)
+	    /// <summary>
+	    /// Perform a multi mapping query with 7 input parameters
+	    /// </summary>
+	    /// <typeparam name="TFirst"></typeparam>
+	    /// <typeparam name="TSecond"></typeparam>
+	    /// <typeparam name="TThird"></typeparam>
+	    /// <typeparam name="TFourth"></typeparam>
+	    /// <typeparam name="TFifth"></typeparam>
+	    /// <typeparam name="TSixth"></typeparam>
+	    /// <typeparam name="TSeventh"></typeparam>
+	    /// <typeparam name="TReturn"></typeparam>
+	    /// <param name="cnn"></param>
+	    /// <param name="sql"></param>
+	    /// <param name="map"></param>
+	    /// <param name="param"></param>
+	    /// <param name="transaction"></param>
+	    /// <param name="splitOn"></param>
+	    /// <param name="commandTimeout"></param>
+	    /// <param name="commandType"></param>
+	    /// <returns></returns>
+	    public static IObservable<TReturn> Query<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> map, dynamic param = null, DbTransaction transaction = null, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null)
         {
-            return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(cnn, sql, map, param as object, transaction, buffered, splitOn, commandTimeout, commandType);
+            return MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(cnn, sql, map, param as object, transaction, splitOn, commandTimeout, commandType);
         }
 
         partial class DontMap { }
-        static IEnumerable<TReturn> MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(
-            this DbConnection cnn, string sql, object map, object param, DbTransaction transaction, bool buffered, string splitOn, int? commandTimeout, CommandType? commandType)
+        static IObservable<TReturn> MultiMap<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(
+            this DbConnection cnn, string sql, object map, object param, DbTransaction transaction, string splitOn, int? commandTimeout, CommandType? commandType)
         {
             var results = MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(cnn, sql, map, param, transaction, splitOn, commandTimeout, commandType, null, null);
-            return buffered ? results.ToList() : results;
+            return results;
         }
 
          
-        static IEnumerable<TReturn> MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this DbConnection cnn, string sql, object map, object param, DbTransaction transaction, string splitOn, int? commandTimeout, CommandType? commandType, DbDataReader reader, Identity identity)
+        static IObservable<TReturn> MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this DbConnection cnn, string sql, object map, object param, DbTransaction transaction, string splitOn, int? commandTimeout, CommandType? commandType, DbDataReader reader, Identity identity)
         {
-            identity = identity ?? new Identity(sql, commandType, cnn, typeof(TFirst), (object)param == null ? null : ((object)param).GetType(), new[] { typeof(TFirst), typeof(TSecond), typeof(TThird), typeof(TFourth), typeof(TFifth), typeof(TSixth), typeof(TSeventh) });
-            CacheInfo cinfo = GetCacheInfo(identity);
+	        return Observable.Create<TReturn>(async observer =>
+		        {
+					identity = identity ?? new Identity(sql, commandType, cnn, typeof(TFirst), (object)param == null ? null : ((object)param).GetType(), new[] { typeof(TFirst), typeof(TSecond), typeof(TThird), typeof(TFourth), typeof(TFifth), typeof(TSixth), typeof(TSeventh) });
+					CacheInfo cinfo = GetCacheInfo(identity);
 
-            DbCommand ownedCommand = null;
-            DbDataReader ownedReader = null;
+					DbCommand ownedCommand = null;
+					DbDataReader ownedReader = null;
 
-            bool wasClosed = cnn != null && cnn.State == ConnectionState.Closed;
-            try
-            {
-                if (reader == null)
-                {
-                    ownedCommand = SetupCommand(cnn, transaction, sql, cinfo.ParamReader, (object)param, commandTimeout, commandType);
-                    if (wasClosed) cnn.Open();
-                    ownedReader = ownedCommand.ExecuteReader();
-                    reader = ownedReader;
-                }
-                DeserializerState deserializer = default(DeserializerState);
-                Func<DbDataReader, object>[] otherDeserializers = null;
+					bool wasClosed = cnn != null && cnn.State == ConnectionState.Closed;
+					try
+					{
+						if (reader == null)
+						{
+							ownedCommand = SetupCommand(cnn, transaction, sql, cinfo.ParamReader, (object)param, commandTimeout, commandType);
+							if (wasClosed) await cnn.OpenAsync();
+							ownedReader = await ownedCommand.ExecuteReaderAsync();
+							reader = ownedReader;
+						}
+						DeserializerState deserializer = default(DeserializerState);
+						Func<DbDataReader, object>[] otherDeserializers = null;
 
-                int hash = GetColumnHash(reader);
-                if ((deserializer = cinfo.Deserializer).Func == null || (otherDeserializers = cinfo.OtherDeserializers) == null || hash != deserializer.Hash)
-                {
-                    var deserializers = GenerateDeserializers(new Type[] { typeof(TFirst), typeof(TSecond), typeof(TThird), typeof(TFourth), typeof(TFifth), typeof(TSixth), typeof(TSeventh) }, splitOn, reader);
-                    deserializer = cinfo.Deserializer = new DeserializerState(hash, deserializers[0]);
-                    otherDeserializers = cinfo.OtherDeserializers = deserializers.Skip(1).ToArray();
-                    SetQueryCache(identity, cinfo);
-                }
+						int hash = GetColumnHash(reader);
+						if ((deserializer = cinfo.Deserializer).Func == null || (otherDeserializers = cinfo.OtherDeserializers) == null || hash != deserializer.Hash)
+						{
+							var deserializers = GenerateDeserializers(new Type[] { typeof(TFirst), typeof(TSecond), typeof(TThird), typeof(TFourth), typeof(TFifth), typeof(TSixth), typeof(TSeventh) }, splitOn, reader);
+							deserializer = cinfo.Deserializer = new DeserializerState(hash, deserializers[0]);
+							otherDeserializers = cinfo.OtherDeserializers = deserializers.Skip(1).ToArray();
+							SetQueryCache(identity, cinfo);
+						}
 
-                Func<DbDataReader, TReturn> mapIt = GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(deserializer.Func, otherDeserializers, map);
+						Func<DbDataReader, TReturn> mapIt = GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(deserializer.Func, otherDeserializers, map);
 
-                if (mapIt != null)
-                {
-                    while (reader.Read())
-                    {
-                        yield return mapIt(reader);
-                    }
-                }
-            }
-            finally
-            {
-                try
-                {
-                    if (ownedReader != null)
-                    {
-                        ownedReader.Dispose();
-                    }
-                }
-                finally
-                {
-                    if (ownedCommand != null)
-                    {
-                        ownedCommand.Dispose();
-                    }
-                    if (wasClosed) cnn.Close();
-                }
-            }
+						if (mapIt != null)
+						{
+							while (await reader.ReadAsync())
+							{
+								observer.OnNext(mapIt(reader));
+							}
+						}
+					}
+					finally
+					{
+						try
+						{
+							if (ownedReader != null)
+							{
+								ownedReader.Dispose();
+							}
+						}
+						finally
+						{
+							if (ownedCommand != null)
+							{
+								ownedCommand.Dispose();
+							}
+							if (wasClosed) cnn.Close();
+						}
+					}
+		        }).Publish().RefCount();
         }
 
         private static Func<DbDataReader, TReturn> GenerateMapper<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(Func<DbDataReader, object> deserializer, Func<DbDataReader, object>[] otherDeserializers, object map)
@@ -1785,15 +1786,15 @@ this DbConnection cnn, string sql, Func<TFirst, TSecond, TThird, TFourth, TRetur
         }
 
 
-        private static int ExecuteCommand(DbConnection cnn, DbTransaction transaction, string sql, Action<DbCommand, object> paramReader, object obj, int? commandTimeout, CommandType? commandType)
+        private static async Task<int> ExecuteCommandAsync(DbConnection cnn, DbTransaction transaction, string sql, Action<DbCommand, object> paramReader, object obj, int? commandTimeout, CommandType? commandType)
         {
             DbCommand cmd = null;
             bool wasClosed = cnn.State == ConnectionState.Closed;
             try
             {
                 cmd = SetupCommand(cnn, transaction, sql, paramReader, obj, commandTimeout, commandType);
-                if (wasClosed) cnn.Open();
-                return cmd.ExecuteNonQuery();
+                if (wasClosed) await cnn.OpenAsync();
+                return await cmd.ExecuteNonQueryAsync();
             }
             finally
             {
@@ -2366,35 +2367,52 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
             /// <summary>
             /// Read the next grid of results, returned as a dynamic object
             /// </summary>
-            public IEnumerable<dynamic> Read(bool buffered = true)
+            public IObservable<dynamic> Read()
             {
-                return Read<DapperRow>(buffered);
+                return Read<DapperRow>();
             }
 
             /// <summary>
             /// Read the next grid of results
             /// </summary>
-            public IEnumerable<T> Read<T>(bool buffered = true)
+            public IObservable<T> Read<T>()
             {
                 if (reader == null) throw new ObjectDisposedException(GetType().FullName, "The reader has been disposed; this can happen after all data has been consumed");
-                if (consumed) throw new InvalidOperationException("Query results must be consumed in the correct order, and each result can only be consumed once");
-                var typedIdentity = identity.ForGrid(typeof(T), gridIndex);
-                CacheInfo cache = GetCacheInfo(typedIdentity);
-                var deserializer = cache.Deserializer;
 
-                int hash = GetColumnHash(reader);
-                if (deserializer.Func == null || deserializer.Hash != hash)
-                {
-                    deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
-                    cache.Deserializer = deserializer;
-                }
-                consumed = true;
-                var result = ReadDeferred<T>(gridIndex, deserializer.Func, typedIdentity);
-                return buffered ? result.ToList() : result;
+	            Interlocked.MemoryBarrier();
+				var gridIndex = Interlocked.Increment(ref consumptionMax);
+				Interlocked.MemoryBarrier();
+
+				var typedIdentity = identity.ForGrid(typeof(T), gridIndex);
+				CacheInfo cache = GetCacheInfo(typedIdentity);
+				var deserializer = cache.Deserializer;
+
+				int hash = GetColumnHash(reader);
+				if (deserializer.Func == null || deserializer.Hash != hash)
+				{
+					deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
+					cache.Deserializer = deserializer;
+				}
+
+	            
+				var result = ReadDeferred<T>(deserializer.Func, typedIdentity, gridIndex);
+	            return result;
             }
 
-            private IEnumerable<TReturn> MultiReadInternal<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(object func, string splitOn)
+            private IObservable<TReturn> MultiReadInternal<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(object func, string splitOn)
             {
+				// We had to break up the original Dapper code pretty bad here - can't have an 'await' inside of a 'finally/catch', so
+				// some Observable chaining was needed.
+
+				Func<Task> onFinally = async () =>
+				{
+					await NextResultAsync();
+				};
+
+				Interlocked.MemoryBarrier();
+				var gridIndex = Interlocked.Increment(ref consumptionMax);
+				Interlocked.MemoryBarrier();
+
                 var identity = this.identity.ForGrid(typeof(TReturn), new Type[] { 
                     typeof(TFirst), 
                     typeof(TSecond),
@@ -2404,97 +2422,122 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
                     typeof(TSixth),
                     typeof(TSeventh)
                 }, gridIndex);
-                try
-                {
-                    foreach (var r in SqlMapper.MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(null, null, func, null, null, splitOn, null, null, reader, identity))
-                    {
-                        yield return r;
-                    }
-                }
-                finally
-                {
-                    NextResult();
-                }
+
+				return SqlMapper.MultiMapImpl<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(null, null, func, null, null, splitOn, null, null, reader, identity)
+					// A .Catch(...).Concat(...) is the best way we can make sure the 'onFinally' executes async regardless as to whether an error occurs in the first section of the Observable
+						.Catch<TReturn, Exception>(e=>Observable.Create<TReturn>(async observer =>
+							{
+								await onFinally();
+								observer.OnError(e);
+							}).Publish().RefCount())
+						.Concat(Observable.Create<TReturn>(async observer =>
+							{
+								await onFinally();
+							}).Publish().RefCount());
             }
 
             /// <summary>
             /// Read multiple objects from a single recordset on the grid
             /// </summary>
-            public IEnumerable<TReturn> Read<TFirst, TSecond, TReturn>(Func<TFirst, TSecond, TReturn> func, string splitOn = "id", bool buffered = true)
+            public IObservable<TReturn> Read<TFirst, TSecond, TReturn>(Func<TFirst, TSecond, TReturn> func, string splitOn = "id")
             {
                 var result = MultiReadInternal<TFirst, TSecond, DontMap, DontMap, DontMap, DontMap, DontMap, TReturn>(func, splitOn);
-                return buffered ? result.ToList() : result;
+	            return result;
             }
 
             /// <summary>
             /// Read multiple objects from a single recordset on the grid
             /// </summary>
-            public IEnumerable<TReturn> Read<TFirst, TSecond, TThird, TReturn>(Func<TFirst, TSecond, TThird, TReturn> func, string splitOn = "id", bool buffered = true)
+            public IObservable<TReturn> Read<TFirst, TSecond, TThird, TReturn>(Func<TFirst, TSecond, TThird, TReturn> func, string splitOn = "id")
             {
                 var result = MultiReadInternal<TFirst, TSecond, TThird, DontMap, DontMap, DontMap, DontMap, TReturn>(func, splitOn);
-                return buffered ? result.ToList() : result;
+	            return result;
             }
 
             /// <summary>
             /// Read multiple objects from a single record set on the grid
             /// </summary>
-            public IEnumerable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TReturn> func, string splitOn = "id", bool buffered = true)
+            public IObservable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TReturn> func, string splitOn = "id")
             {
                 var result = MultiReadInternal<TFirst, TSecond, TThird, TFourth, DontMap, DontMap, DontMap, TReturn>(func, splitOn);
-                return buffered ? result.ToList() : result;
+	            return result;
             }
 
             /// <summary>
             /// Read multiple objects from a single record set on the grid
             /// </summary>
-            public IEnumerable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> func, string splitOn = "id", bool buffered = true)
+            public IObservable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> func, string splitOn = "id")
             {
                 var result = MultiReadInternal<TFirst, TSecond, TThird, TFourth, TFifth, DontMap, DontMap, TReturn>(func, splitOn);
-                return buffered ? result.ToList() : result;
+	            return result;
             }
             /// <summary>
             /// Read multiple objects from a single record set on the grid
             /// </summary>
-            public IEnumerable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> func, string splitOn = "id", bool buffered = true)
+            public IObservable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> func, string splitOn = "id")
             {
                 var result = MultiReadInternal<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, DontMap, TReturn>(func, splitOn);
-                return buffered ? result.ToList() : result;
+	            return result;
             }
             /// <summary>
             /// Read multiple objects from a single record set on the grid
             /// </summary>
-            public IEnumerable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> func, string splitOn = "id", bool buffered = true)
+            public IObservable<TReturn> Read<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> func, string splitOn = "id")
             {
                 var result = MultiReadInternal<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(func, splitOn);
-                return buffered ? result.ToList() : result;
+	            return result;
             }
 
-            private IEnumerable<T> ReadDeferred<T>(int index, Func<DbDataReader, object> deserializer, Identity typedIdentity)
+            private IObservable<T> ReadDeferred<T>(Func<DbDataReader, object> deserializer, Identity typedIdentity, int consumptionOrdinal)
             {
-                try
-                {
-                    while (index == gridIndex && reader.Read())
-                    {
-                        yield return (T)deserializer(reader);
-                    }
-                }
-                finally // finally so that First etc progresses things even when multiple rows
-                {
-                    if (index == gridIndex)
-                    {
-                        NextResult();
-                    }
-                }
+				// We had to break up the original Dapper code pretty bad here - can't have an 'await' inside of a 'finally/catch', so
+				// some Observable chaining was needed.
+
+	            Func<Task> onFinally = async () =>
+		            {
+						// finally so that First etc progresses things even when multiple rows
+						Interlocked.MemoryBarrier();
+						var consumptionWasValid = consumptionOrdinal == (consumptionFinished + 1);
+						Interlocked.MemoryBarrier();
+						if (consumptionWasValid)
+	            		{
+	            			await NextResultAsync();
+	            		}
+		            };
+
+	            return Observable.Create<T>(async observer =>
+		            {
+			            Interlocked.MemoryBarrier();
+			            var consumptionValid = consumptionOrdinal == (consumptionFinished + 1);
+						Interlocked.MemoryBarrier();
+
+						if(!consumptionValid)
+							throw new InvalidOperationException("Query results must be consumed in the correct order, and each result can only be consumed once");
+
+			            while (await reader.ReadAsync())
+			            {
+				            observer.OnNext((T) deserializer(reader));
+			            }
+			            return;
+		            }).Publish().RefCount()
+					// A .Catch(...).Concat(...) is the best way we can make sure the 'onFinally' executes async regardless as to whether an error occurs in the first section of the Observable
+					.Catch<T, Exception>(e => Observable.Create<T>(async observer =>
+			            {
+				            await onFinally();
+				            observer.OnError(e);
+			            }).Publish().RefCount())
+					.Concat(Observable.Create<T>(async observer =>
+			            {
+				            await onFinally();
+						}).Publish().RefCount());
             }
-            private int gridIndex, readCount;
-            private bool consumed;
-            private void NextResult()
+	        private int consumptionMax = 0;
+	        private int consumptionFinished = 0;
+            private async Task NextResultAsync()
             {
-                if (reader.NextResult())
+                if (await reader.NextResultAsync())
                 {
-                    readCount++;
-                    gridIndex++;
-                    consumed = false;
+					Interlocked.Increment(ref consumptionFinished);
                 }
                 else
                 {

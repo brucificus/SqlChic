@@ -5,7 +5,8 @@ using System.Data.Linq;
 using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Linq;
-using BLToolkit.Data;
+ using System.Reactive.Linq;
+ using BLToolkit.Data;
 using Dapper;
 using Massive;
 using NHibernate.Criterion;
@@ -122,12 +123,12 @@ namespace SqlMapper
 			tests.Add(id => entityContext5.Posts.First(p => p.Id == id), "Entity framework No Tracking");
 
             var mapperConnection = Program.GetOpenConnection();
-            tests.Add(id => mapperConnection.Query<Post>("select * from Posts where Id = @Id", new { Id = id }, buffered: true).First(), "Mapper Query (buffered)");
-            tests.Add(id => mapperConnection.Query<Post>("select * from Posts where Id = @Id", new { Id = id }, buffered: false).First(), "Mapper Query (non-buffered)");
+            tests.Add(id => mapperConnection.Query<Post>("select * from Posts where Id = @Id", new { Id = id }).FirstAsync().Wait(), "Mapper Query (buffered)");
+            tests.Add(id => mapperConnection.Query<Post>("select * from Posts where Id = @Id", new { Id = id }).FirstAsync().Wait(), "Mapper Query (non-buffered)");
 
             var mapperConnection2 = Program.GetOpenConnection();
-            tests.Add(id => mapperConnection2.Query("select * from Posts where Id = @Id", new { Id = id }, buffered: true).First(), "Dynamic Mapper Query (buffered)");
-            tests.Add(id => mapperConnection2.Query("select * from Posts where Id = @Id", new { Id = id }, buffered: false).First(), "Dynamic Mapper Query (non-buffered)");
+            tests.Add(id => mapperConnection2.Query("select * from Posts where Id = @Id", new { Id = id }).FirstAsync().Wait(), "Dynamic Mapper Query (buffered)");
+            tests.Add(id => mapperConnection2.Query("select * from Posts where Id = @Id", new { Id = id }).FirstAsync().Wait(), "Dynamic Mapper Query (non-buffered)");
 
 			// PetaPoco test with all default options
 			var petapoco = new PetaPoco.Database(Program.connectionString, "System.Data.SqlClient");

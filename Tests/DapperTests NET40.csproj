@@ -37,61 +37,59 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="BLToolkit.4">
-      <HintPath>bltoolkit\BLToolkit.4.dll</HintPath>
+    <Reference Include="BLToolkit.4, Version=4.1.9.2120, Culture=neutral, PublicKeyToken=b1d3f6ab3aadaca3, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\BLToolkit.4.1.0.0\lib\net40\BLToolkit.4.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\FSharp.Core.4.0.0\lib\FSharp.Core.dll</HintPath>
     </Reference>
     <Reference Include="FSharp.PowerPack, Version=2.0.0.0, Culture=neutral, PublicKeyToken=a19089b1c74d0809, processorArchitecture=MSIL">
-      <Private>True</Private>
-      <HintPath>..\packages\FSPowerPack.Community.2.0.0.0\Lib\Net40\FSharp.PowerPack.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\FSPowerPack.Core.Community.2.0.1.0\Lib\Net40\FSharp.PowerPack.dll</HintPath>
     </Reference>
-    <Reference Include="FSharp.PowerPack.Linq, Version=2.0.0.0, Culture=neutral, PublicKeyToken=a19089b1c74d0809, processorArchitecture=MSIL">
-      <Private>True</Private>
-      <HintPath>..\packages\FSPowerPack.Community.2.0.0.0\Lib\Net40\FSharp.PowerPack.Linq.dll</HintPath>
+    <Reference Include="Iesi.Collections, Version=1.0.1.0, Culture=neutral, PublicKeyToken=aa95f207798dfdb4, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Iesi.Collections.3.1.0.4000\lib\Net35\Iesi.Collections.dll</HintPath>
     </Reference>
-    <Reference Include="FSharp.PowerPack.Metadata, Version=2.0.0.0, Culture=neutral, PublicKeyToken=a19089b1c74d0809, processorArchitecture=MSIL">
-      <Private>True</Private>
-      <HintPath>..\packages\FSPowerPack.Community.2.0.0.0\Lib\Net40\FSharp.PowerPack.Metadata.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.PowerPack.Parallel.Seq, Version=2.0.0.0, Culture=neutral, PublicKeyToken=a19089b1c74d0809, processorArchitecture=MSIL">
-      <HintPath>..\packages\FSPowerPack.Community.2.0.0.0\Lib\Net40\FSharp.PowerPack.Parallel.Seq.dll</HintPath>
-    </Reference>
-    <Reference Include="Iesi.Collections">
-      <HintPath>NHibernate\Iesi.Collections.dll</HintPath>
-    </Reference>
-    <Reference Include="LinFu.DynamicProxy">
-      <HintPath>NHibernate\LinFu.DynamicProxy.dll</HintPath>
+    <Reference Include="LinFu.DynamicProxy, Version=1.0.4.18998, Culture=neutral, PublicKeyToken=62a6874124340d6e, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\NHibernate.LinFu.3.1.0.4000\lib\Net35\LinFu.DynamicProxy.dll</HintPath>
     </Reference>
     <Reference Include="Mono.Security">
       <HintPath>..\packages\Npgsql.2.0.11\lib\Net40\Mono.Security.dll</HintPath>
     </Reference>
-    <Reference Include="NHibernate">
-      <HintPath>NHibernate\NHibernate.dll</HintPath>
+    <Reference Include="NHibernate, Version=3.1.0.4000, Culture=neutral, PublicKeyToken=aa95f207798dfdb4, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\NHibernate.3.1.0.4000\lib\Net35\NHibernate.dll</HintPath>
     </Reference>
-    <Reference Include="NHibernate.ByteCode.LinFu">
-      <HintPath>NHibernate\NHibernate.ByteCode.LinFu.dll</HintPath>
+    <Reference Include="NHibernate.ByteCode.LinFu, Version=3.1.0.4000, Culture=neutral, PublicKeyToken=aa95f207798dfdb4, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\NHibernate.LinFu.3.1.0.4000\lib\Net35\NHibernate.ByteCode.LinFu.dll</HintPath>
     </Reference>
     <Reference Include="Npgsql">
       <HintPath>..\packages\Npgsql.2.0.11\lib\Net40\Npgsql.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.Common, Version=1.0.4110.36238, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.Common, Version=3.9.59.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>OrmLite\ServiceStack.Common.dll</HintPath>
+      <HintPath>..\packages\ServiceStack.Common.3.9.59\lib\net35\ServiceStack.Common.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.Interfaces, Version=1.0.4110.36238, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.Interfaces, Version=3.9.59.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>OrmLite\ServiceStack.Interfaces.dll</HintPath>
+      <HintPath>..\packages\ServiceStack.Common.3.9.59\lib\net35\ServiceStack.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.OrmLite, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.OrmLite, Version=3.9.59.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>OrmLite\ServiceStack.OrmLite.dll</HintPath>
+      <HintPath>..\packages\ServiceStack.OrmLite.SqlServer.3.9.59\lib\ServiceStack.OrmLite.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.OrmLite.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.OrmLite.SqlServer, Version=3.9.59.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>OrmLite\ServiceStack.OrmLite.SqlServer.dll</HintPath>
+      <HintPath>..\packages\ServiceStack.OrmLite.SqlServer.3.9.59\lib\ServiceStack.OrmLite.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.Text, Version=2.0.8.8681, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.Text, Version=3.9.59.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>OrmLite\ServiceStack.Text.dll</HintPath>
+      <HintPath>..\packages\ServiceStack.Text.3.9.59\lib\net35\ServiceStack.Text.dll</HintPath>
     </Reference>
     <Reference Include="Simple.Data">
       <HintPath>Simple.Data\Simple.Data.dll</HintPath>
@@ -102,20 +100,13 @@
     <Reference Include="Simple.Data.SqlServer">
       <HintPath>Simple.Data\Simple.Data.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="Soma.Core, Version=0.8.0.0, Culture=neutral, PublicKeyToken=bc5ae85929f8312a, processorArchitecture=MSIL">
+    <Reference Include="Soma.Core, Version=1.8.0.6, Culture=neutral, PublicKeyToken=bc5ae85929f8312a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>Soma\Soma.Core.dll</HintPath>
+      <HintPath>..\packages\Soma.1.8.0.6\lib\Net40\Soma.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Soma.Core.IT.MsSql, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="SubSonic.Core, Version=3.0.0.3, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>Soma\Soma.Core.IT.MsSql.dll</HintPath>
-    </Reference>
-    <Reference Include="Soma.Core.IT.MsSqlCe, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>Soma\Soma.Core.IT.MsSqlCe.dll</HintPath>
-    </Reference>
-    <Reference Include="SubSonic.Core">
-      <HintPath>SubSonic\SubSonic.Core.dll</HintPath>
+      <HintPath>..\packages\SubSonic.3.0.0.4\lib\SubSonic.Core.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.configuration" />
@@ -126,8 +117,22 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\SqlServerCompact.4.0.8482.1\lib\System.Data.SqlServerCe.dll</HintPath>
     </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Reactive.Core">
+      <HintPath>..\packages\Rx-Core.2.1.30214.0\lib\Net45\System.Reactive.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.Interfaces">
+      <HintPath>..\packages\Rx-Interfaces.2.1.30214.0\lib\Net45\System.Reactive.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.Linq">
+      <HintPath>..\packages\Rx-Linq.2.1.30214.0\lib\Net45\System.Reactive.Linq.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.PlatformServices">
+      <HintPath>..\packages\Rx-PlatformServices.2.1.30214.0\lib\Net45\System.Reactive.PlatformServices.dll</HintPath>
+    </Reference>
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Security" />
+    <Reference Include="System.Transactions" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -225,6 +230,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="App_Readme\Soma.readme.txt" />
     <Content Include="NHibernate\hibernate.cfg.xml" />
     <Content Include="NHibernate\Post.hbm.xml" />
     <Content Include="OrmLite\ServiceStack.Common.dll" />
