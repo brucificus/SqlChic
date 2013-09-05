@@ -2378,19 +2378,24 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
             public IObservable<T> Read<T>()
             {
                 if (reader == null) throw new ObjectDisposedException(GetType().FullName, "The reader has been disposed; this can happen after all data has been consumed");
-                if (consumed) throw new InvalidOperationException("Query results must be consumed in the correct order, and each result can only be consumed once");
-                var typedIdentity = identity.ForGrid(typeof(T), gridIndex);
-                CacheInfo cache = GetCacheInfo(typedIdentity);
-                var deserializer = cache.Deserializer;
 
-                int hash = GetColumnHash(reader);
-                if (deserializer.Func == null || deserializer.Hash != hash)
-                {
-                    deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
-                    cache.Deserializer = deserializer;
-                }
-                consumed = true;
-                var result = ReadDeferred<T>(gridIndex, deserializer.Func, typedIdentity);
+	            Interlocked.MemoryBarrier();
+				var gridIndex = Interlocked.Increment(ref consumptionMax);
+				Interlocked.MemoryBarrier();
+
+				var typedIdentity = identity.ForGrid(typeof(T), gridIndex);
+				CacheInfo cache = GetCacheInfo(typedIdentity);
+				var deserializer = cache.Deserializer;
+
+				int hash = GetColumnHash(reader);
+				if (deserializer.Func == null || deserializer.Hash != hash)
+				{
+					deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
+					cache.Deserializer = deserializer;
+				}
+
+	            
+				var result = ReadDeferred<T>(deserializer.Func, typedIdentity, gridIndex);
 	            return result;
             }
 
@@ -2403,6 +2408,10 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
 				{
 					await NextResultAsync();
 				};
+
+				Interlocked.MemoryBarrier();
+				var gridIndex = Interlocked.Increment(ref consumptionMax);
+				Interlocked.MemoryBarrier();
 
                 var identity = this.identity.ForGrid(typeof(TReturn), new Type[] { 
                     typeof(TFirst), 
@@ -2479,7 +2488,7 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
 	            return result;
             }
 
-            private IObservable<T> ReadDeferred<T>(int index, Func<DbDataReader, object> deserializer, Identity typedIdentity)
+            private IObservable<T> ReadDeferred<T>(Func<DbDataReader, object> deserializer, Identity typedIdentity, int consumptionOrdinal)
             {
 				// We had to break up the original Dapper code pretty bad here - can't have an 'await' inside of a 'finally/catch', so
 				// some Observable chaining was needed.
@@ -2487,7 +2496,10 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
 	            Func<Task> onFinally = async () =>
 		            {
 						// finally so that First etc progresses things even when multiple rows
-	            		if (index == gridIndex)
+						Interlocked.MemoryBarrier();
+						var consumptionWasValid = consumptionOrdinal == (consumptionFinished + 1);
+						Interlocked.MemoryBarrier();
+						if (consumptionWasValid)
 	            		{
 	            			await NextResultAsync();
 	            		}
@@ -2495,7 +2507,14 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
 
 	            return Observable.Create<T>(async observer =>
 		            {
-			            while (index == gridIndex && (await reader.ReadAsync()))
+			            Interlocked.MemoryBarrier();
+			            var consumptionValid = consumptionOrdinal == (consumptionFinished + 1);
+						Interlocked.MemoryBarrier();
+
+						if(!consumptionValid)
+							throw new InvalidOperationException("Query results must be consumed in the correct order, and each result can only be consumed once");
+
+			            while (await reader.ReadAsync())
 			            {
 				            observer.OnNext((T) deserializer(reader));
 			            }
@@ -2512,15 +2531,13 @@ Type type, DbDataReader reader, int startBound = 0, int length = -1, bool return
 				            await onFinally();
 						}).Publish().RefCount());
             }
-            private int gridIndex, readCount;
-            private bool consumed;
+	        private int consumptionMax = 0;
+	        private int consumptionFinished = 0;
             private async Task NextResultAsync()
             {
                 if (await reader.NextResultAsync())
                 {
-                    readCount++;
-                    gridIndex++;
-                    consumed = false;
+					Interlocked.Increment(ref consumptionFinished);
                 }
                 else
                 {
