@@ -301,7 +301,7 @@ namespace SqlMapper
         }
         public async Task SelectBinaryAsync()
         {
-			(await connection.Query<byte[]>("select cast(1 as varbinary(4))").FirstAsync()).IsSequenceEqualTo(new byte[] { 1 });
+			(await connection.Query<byte[]>("select cast(1 as varbinary(4))").FirstAsync()).IsSequenceEqualTo(new byte[] { 0,0,0,1 });
         }
         public async Task PassInIntArrayAsync()
         {
