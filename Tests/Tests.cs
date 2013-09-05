@@ -618,55 +618,58 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             ((int?)row.B)
                 .IsEqualTo(2);
         }
-        public async Task TestEnumerationAsync()
-        {
-            var en = connection.Query<int>("select 1 as one union all select 2 as one").Next();
-            var i = en.GetEnumerator();
-            i.MoveNext();
+		
+		// Had to turn on MARS for async, making this test not very applicable anymore
+		//public async Task TestEnumerationAsync()
+		//{
+		//	var en = connection.Query<int>("select 1 as one union all select 2 as one").Next();
+		//	var i = en.GetEnumerator();
+		//	i.MoveNext();
 
-            bool gotException = false;
-            try
-            {
-                var x = await connection.Query<int>("select 1 as one").FirstAsync();
-            }
-            catch (Exception)
-            {
-                gotException = true;
-            }
+		//	bool gotException = false;
+		//	try
+		//	{
+		//		var x = await connection.Query<int>("select 1 as one").FirstAsync();
+		//	}
+		//	catch (Exception)
+		//	{
+		//		gotException = true;
+		//	}
 
-            while (i.MoveNext())
-            { }
+		//	while (i.MoveNext())
+		//	{ }
 
-            // should not exception, since enumertated
-            en = await connection.Query<int>("select 1 as one").ToList();
+		//	// should not exception, since enumertated
+		//	en = await connection.Query<int>("select 1 as one").ToList();
 
-            gotException.IsTrue();
-        }
+		//	gotException.IsTrue();
+		//}
 
-        public async Task TestEnumerationDynamicAsync()
-        {
-            var en = connection.Query("select 1 as one union all select 2 as one").Next();
-            var i = en.GetEnumerator();
-            i.MoveNext();
+		// Had to turn on MARS for async, making this test not very applicable anymore
+		//public async Task TestEnumerationDynamicAsync()
+		//{
+		//	var en = connection.Query("select 1 as one union all select 2 as one").Next();
+		//	var i = en.GetEnumerator();
+		//	i.MoveNext();
 
-            bool gotException = false;
-            try
-            {
-                var x = await connection.Query("select 1 as one").FirstAsync();
-            }
-            catch (Exception)
-            {
-                gotException = true;
-            }
+		//	bool gotException = false;
+		//	try
+		//	{
+		//		var x = await connection.Query("select 1 as one").FirstAsync();
+		//	}
+		//	catch (Exception)
+		//	{
+		//		gotException = true;
+		//	}
 
-            while (i.MoveNext())
-            { }
+		//	while (i.MoveNext())
+		//	{ }
 
-            // should not exception, since enumertated
-            en = await connection.Query("select 1 as one").ToList();
+		//	// should not exception, since enumertated
+		//	en = await connection.Query("select 1 as one").ToList();
 
-            gotException.IsTrue();
-        }
+		//	gotException.IsTrue();
+		//}
 
         public async Task TestNakedBigIntAsync()
         {
