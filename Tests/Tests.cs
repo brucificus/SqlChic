@@ -387,18 +387,18 @@ namespace SqlMapper
         {
             string end_wildcard = @"
 SELECT * FROM #users16726709
-WHERE (first_name LIKE CONCAT(@search_term, '%') OR last_name LIKE CONCAT(@search_term, '%'));";
+WHERE (first_name LIKE @search_term+'%' OR last_name LIKE @search_term+'%');";
 
             string both_wildcards = @"
 SELECT * FROM #users16726709
-WHERE (first_name LIKE CONCAT('%', @search_term, '%') OR last_name LIKE CONCAT('%', @search_term, '%'));";
+WHERE (first_name LIKE '%'+@search_term+'%' OR last_name LIKE '%'+@search_term+'%');";
 
             string formatted = @"
 SELECT * FROM #users16726709
 WHERE (first_name LIKE {0} OR last_name LIKE {0});";
 
-            string use_end_only = @"CONCAT(@search_term, '%')";
-            string use_both = @"CONCAT('%', @search_term, '%')";
+            string use_end_only = @"@search_term+'%'";
+            string use_both = @"'%'+@search_term+'%'";
 
             // if true, slower query due to not being able to use indices, but will allow searching inside strings 
             bool allow_start_wildcards = false;
