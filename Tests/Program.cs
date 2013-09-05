@@ -30,7 +30,7 @@ namespace SqlMapper
     class Program
     {
 
-        public static readonly string connectionString = "Data Source=.;Initial Catalog=tempdb;Integrated Security=True";
+		public static readonly string connectionString = "Data Source=.;Initial Catalog=tempdb;Integrated Security=True;MultipleActiveResultSets=True";
 
         public static SqlConnection GetOpenConnection()
         {
