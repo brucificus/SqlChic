@@ -11,8 +11,9 @@ using System.Data.SqlServerCe;
 using System.IO;
 using System.Data;
 using System.Dynamic;
-using System.ComponentModel;
 using Microsoft.CSharp.RuntimeBinder;
+using NUnit.Framework;
+using DescriptionAttribute = System.ComponentModel.DescriptionAttribute;
 
 #if POSTGRESQL
 using Npgsql;
@@ -21,10 +22,18 @@ using Npgsql;
 namespace SqlChic.Tests
 {
 
-    class Tests
+    public class Tests
     {
-        SqlConnection connection = Program.GetOpenConnection();
-		//private SqlConnection connection { get { return Program.GetOpenConnection(); } }
+        //SqlConnection connection = Program.GetOpenConnection();
+        private SqlConnection connection
+        {
+            get
+            {
+                var connection = new SqlConnection("Data Source=.;Initial Catalog=tempdb;Integrated Security=True;MultipleActiveResultSets=True");
+                connection.Open();
+                return connection;
+            }
+        }
 
         public class AbstractInheritance
         {
@@ -68,6 +77,7 @@ namespace SqlChic.Tests
             public Comment Comment { get; set; }
         }
 
+        [Test]
         public async Task TestMultiMapWithConstructorAsync()
         { 
             var createSql = @"
@@ -113,6 +123,7 @@ namespace SqlChic.Tests
             public string B { get; set; }
         }
 
+        [Test]
         public async Task TestMultipleConstructorsAsync()
         {
             MultipleConstructors mult = await connection.Query<MultipleConstructors>("select 0 A, 'Dapper' b").FirstAsync();
@@ -134,6 +145,7 @@ namespace SqlChic.Tests
             public string B { get; set; }
         }
 
+        [Test]
         public async Task TestConstructorsWithAccessModifiersAsync()
         {
             ConstructorsWithAccessModifiers value = await connection.Query<ConstructorsWithAccessModifiers>("select 0 A, 'Dapper' b").FirstAsync();
@@ -158,6 +170,7 @@ namespace SqlChic.Tests
             public Guid G { get; set; }
         }
 
+        [Test]
         public async Task TestNoDefaultConstructorAsync()
         {
             var guid = Guid.NewGuid();
@@ -182,6 +195,7 @@ namespace SqlChic.Tests
             public char? Char3 { get; set; }
         }
 
+        [Test]
         public async Task TestNoDefaultConstructorWithCharAsync()
         {
             const char c1 = 'ą';
@@ -205,6 +219,7 @@ namespace SqlChic.Tests
             public ShortEnum? NE2 { get; set; }
         }
 
+        [Test]
         public async Task TestNoDefaultConstructorWithEnumAsync()
         {
             NoDefaultConstructorWithEnum nodef = await connection.Query<NoDefaultConstructorWithEnum>("select cast(2 as smallint) E1, cast(5 as smallint) n1, cast(null as smallint) n2").FirstAsync();
@@ -223,6 +238,7 @@ namespace SqlChic.Tests
             }
         }
 
+        [Test]
         public async Task TestNoDefaultConstructorBinaryAsync()
         {
             byte[] orig = new byte[20];
@@ -233,6 +249,7 @@ namespace SqlChic.Tests
         }
 
         // http://stackoverflow.com/q/8593871
+        [Test]
         public async Task TestAbstractInheritanceAsync() 
         {
             var order = await connection.Query<AbstractInheritance.ConcreteOrder>("select 1 Internal,2 Protected,3 [Public],4 Concrete").FirstAsync();
@@ -243,6 +260,7 @@ namespace SqlChic.Tests
             order.Concrete.IsEqualTo(4);
         }
 
+        [Test]
         public async Task TestListOfAnsiStringsAsync()
         {
             var results = await connection.Query<string>("select * from (select 'a' str union select 'b' union select 'c') X where str in @strings",
@@ -252,6 +270,7 @@ namespace SqlChic.Tests
             results[1].IsEqualTo("b");
         }
 
+        [Test]
         public async Task TestNullableGuidSupportAsync()
         {
             var guid = await connection.Query<Guid?>("select null").FirstAsync();
@@ -262,6 +281,7 @@ namespace SqlChic.Tests
             guid.IsEqualTo(guid2);
         }
 
+        [Test]
         public async Task TestNonNullableGuidSupportAsync()
         {
             var guid = Guid.NewGuid();
@@ -284,6 +304,7 @@ namespace SqlChic.Tests
         
         }
 
+        [Test]
         public async Task TestStructsAsync()
         {
             var car = await connection.Query<Car>("select 'Ford' Name, 21 Age, 2 Trap").FirstAsync();
@@ -293,27 +314,34 @@ namespace SqlChic.Tests
             ((int)car.Trap).IsEqualTo(2);
         }
 
+        [Test]
         public async Task SelectListIntAsync()
         {
             (await connection.Query<int>("select 1 union all select 2 union all select 3").ToList())
               .IsSequenceEqualTo(new[] { 1, 2, 3 });
         }
+        
+        [Test]
         public async Task SelectBinaryAsync()
         {
 			(await connection.Query<byte[]>("select cast(1 as varbinary(4))").FirstAsync()).IsSequenceEqualTo(new byte[] { 0,0,0,1 });
         }
+
+        [Test]
         public async Task PassInIntArrayAsync()
         {
             (await connection.Query<int>("select * from (select 1 as Id union all select 2 union all select 3) as X where Id in @Ids", new { Ids = new int[] { 1, 2, 3 }.AsEnumerable() }).ToList())
              .IsSequenceEqualTo(new[] { 1, 2, 3 });
         }
 
+        [Test]
         public async Task PassInEmptyIntArrayAsync()
         {
             (await connection.Query<int>("select * from (select 1 as Id union all select 2 union all select 3) as X where Id in @Ids", new { Ids = new int[0] }).ToList())
              .IsSequenceEqualTo(new int[0]);
         }
 
+        [Test]
         public async Task TestSchemaChangedAsync()
         {
             await connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
@@ -327,6 +355,7 @@ namespace SqlChic.Tests
             await connection.Execute("drop table #dog");
         }
 
+        [Test]
         public async Task TestSchemaChangedMultiMapAsync()
         {
             await connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
@@ -348,6 +377,7 @@ namespace SqlChic.Tests
             await connection.Execute("drop table #dog");
         }
 
+        [Test]
         public async Task TestReadMultipleIntegersWithSplitOnAnyAsync()
         {
             (await connection.Query<int, int, int, Tuple<int, int, int>>(
@@ -355,12 +385,14 @@ namespace SqlChic.Tests
              .IsSequenceEqualTo(new[] { Tuple.Create(1, 2, 3), Tuple.Create(4, 5, 6) });
         }
 
+        [Test]
         public async Task TestDoubleParamAsync()
         {
             (await connection.Query<double>("select @d", new { d = 0.1d }).FirstAsync())
                 .IsEqualTo(0.1d);
         }
 
+        [Test]
         public async Task TestBoolParamAsync()
         {
             (await connection.Query<bool>("select @b", new { b = false }).FirstAsync())
@@ -369,12 +401,14 @@ namespace SqlChic.Tests
 
         // http://code.google.com/p/dapper-dot-net/issues/detail?id=70
         // https://connect.microsoft.com/VisualStudio/feedback/details/381934/sqlparameter-dbtype-dbtype-time-sets-the-parameter-to-sqldbtype-datetime-instead-of-sqldbtype-time
+        [Test]
         public async Task TestTimeSpanParamAsync()
         {
             (await connection.Query<TimeSpan>("select @ts", new { ts = TimeSpan.FromMinutes(42) }).FirstAsync())
                 .IsEqualTo(TimeSpan.FromMinutes(42));
         }
 
+        [Test]
         public async Task TestStringsAsync()
         {
             (await connection.Query<string>(@"select 'a' a union select 'b'").ToList())
@@ -382,6 +416,7 @@ namespace SqlChic.Tests
         }
 
         // see http://stackoverflow.com/questions/16726709/string-format-with-sql-wildcard-causing-dapper-query-to-break
+        [Test]
         public async Task CheckComplexConcatAsync()
         {
             string end_wildcard = @"
@@ -431,6 +466,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             public EnumParam? B { get; set; }
             public EnumParam? C { get; set; }
         }
+        
+        [Test]
         public async Task TestEnumParamsWithNullableAsync()
         {
             EnumParam a = EnumParam.A;
@@ -441,6 +478,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             obj.B.IsEqualTo(EnumParam.B);
             obj.C.IsEqualTo(null);
         }
+
+        [Test]
         public async Task TestEnumParamsWithoutNullableAsync()
         {
             EnumParam a = EnumParam.A;
@@ -451,6 +490,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             obj.B.IsEqualTo(EnumParam.B);
             obj.C.IsEqualTo((EnumParam)0);
         }
+        
         public class Dog
         {
             public int? Age { get; set; }
@@ -461,6 +501,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             public int IgnoredProperty { get { return 1; } }
         }
 
+        [Test]
         public async Task TestExtraFieldsAsync()
         {
             var guid = Guid.NewGuid();
@@ -476,7 +517,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                 .IsEqualTo(guid);
         }
 
-
+        [Test]
         public async Task TestStrongTypeAsync()
         {
             var guid = Guid.NewGuid();
@@ -492,11 +533,13 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                 .IsEqualTo(guid);
         }
 
+        [Test]
         public async Task TestSimpleNullAsync()
         {
             (await connection.Query<DateTime?>("select null").FirstAsync()).IsNull();
         }
 
+        [Test]
         public async Task TestExpandoAsync()
         {
             var rows = await connection.Query("select 1 A, 2 B union all select 3, 4").ToList();
@@ -514,6 +557,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                 .IsEqualTo(4);
         }
 
+        [Test]
         public async Task TestStringListAsync()
         {
             (await connection.Query<string>("select * from (select 'a' as x union all select 'b' union all select 'c') as T where x in @strings", new { strings = new[] { "a", "b", "c" } }).ToList())
@@ -523,6 +567,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                    .IsSequenceEqualTo(new string[0]);
         }
 
+        [Test]
         public async Task TestExecuteCommandAsync()
         {
             (await connection.Execute(@"
@@ -534,6 +579,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
     set nocount on 
     drop table #t", new { a = 1, b = 2 })).IsEqualTo(2);
         }
+        
+        [Test]
         public async Task TestExecuteCommandWithHybridParametersAsync()
         {
             var p = new DynamicParameters(new { a = 1, b = 2 });
@@ -541,6 +588,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             await connection.Execute(@"set @c = @a + @b", p);
             p.Get<int>("@c").IsEqualTo(3);
         }
+
+        [Test]
         public async Task TestExecuteMultipleCommandAsync()
         {
             await connection.Execute("create table #t(i int)");
@@ -556,6 +605,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             public int Age { get; set; }
         }
 
+        [Test]
         public async Task TestExecuteMultipleCommandStrongTypeAsync()
         {
             await connection.Execute("create table #t(Name nvarchar(max), Age int)");
@@ -569,6 +619,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             sum.IsEqualTo(3);
         }
 
+        [Test]
         public async Task TestExecuteMultipleCommandObjectArrayAsync()
         {
             await connection.Execute("create table #t(i int)");
@@ -578,6 +629,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             sum.IsEqualTo(10);
         }
 
+        [Test]
         public async Task TestMassiveStringsAsync()
         {
             var str = new string('X', 20000);
@@ -596,17 +648,19 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             private int PrivGet { get { return _priv;} }
         }
 
+        [Test]
         public async Task TestSetInternalAsync()
         {
             (await connection.Query<TestObj>("select 10 as [Internal]").FirstAsync())._internal.IsEqualTo(10);
         }
 
+        [Test]
         public async Task TestSetPrivateAsync()
         {
             (await connection.Query<TestObj>("select 10 as [Priv]").FirstAsync())._priv.IsEqualTo(10);
         }
 
-
+        [Test]
         public async Task TestExpandWithNullableFieldsAsync()
         {
             var row = await connection.Query("select null A, 2 B").SingleAsync();
@@ -670,6 +724,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
 		//	gotException.IsTrue();
 		//}
 
+        [Test]
         public async Task TestNakedBigIntAsync()
         {
             long foo = 12345;
@@ -677,6 +732,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             foo.IsEqualTo(result);
         }
 
+        [Test]
         public async Task TestBigIntMemberAsync()
         {
             long foo = 12345;
@@ -686,6 +742,7 @@ insert @bar values (@foo)
 select * from @bar", new { foo }).SingleAsync();
             result.Value.IsEqualTo(foo);
         }
+        
         class WithBigInt
         {
             public long Value { get; set; }
@@ -703,6 +760,8 @@ select * from @bar", new { foo }).SingleAsync();
             public string Content { get; set; }
             public Comment Comment { get; set; }
         }
+
+        [Test]
         public async Task TestMultiMapAsync()
         {
             var createSql = @"
@@ -736,8 +795,7 @@ Order by p.Id";
             await connection.Execute("drop table #Users drop table #Posts");
         }
 
-
-
+        [Test]
         public async Task TestMultiMapGridReaderAsync()
         {
             var createSql = @"
@@ -782,6 +840,7 @@ Order by p.Id
 
         }
 
+        [Test]
         public async Task TestQueryMultipleAsyncBuffered()
         {
             using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
@@ -798,6 +857,7 @@ Order by p.Id
             }
         }
 
+        [Test]
         public async Task TestQueryMultipleAsyncNonBufferedIncorrectOrder()
         {
             using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
@@ -814,6 +874,8 @@ Order by p.Id
                 }
             }
         }
+
+        [Test]
         public async Task TestQueryMultipleAsyncNonBufferedCcorrectOrder()
         {
             using (var grid = await connection.QueryMultipleAsync("select 1; select 2; select @x; select 4", new { x = 3 }))
@@ -829,6 +891,8 @@ Order by p.Id
 				d.IsEqualTo(4);
             }
         }
+
+        [Test]
         public async Task TestMultiMapDynamicAsync()
         {
             var createSql = @"
@@ -875,6 +939,8 @@ Order by p.Id";
             public string Name { get; set; }
             public string Description { get; set; }
         }
+
+        [Test]
         public async Task TestMultiMapWithSplit() // http://stackoverflow.com/q/6056778/233Async54
         {
             var sql = @"select 1 as id, 'abc' as name, 2 as id, 'def' as name";
@@ -889,6 +955,8 @@ Order by p.Id";
             product.Category.Id.IsEqualTo(2);
             product.Category.Name.IsEqualTo("def");
         }
+
+        [Test]
         public async Task TestMultiMapWithSplitWithNullValue() // http://stackoverflow.com/q/10744728/4499Async06
         {
             var sql = @"select 1 as id, 'abc' as name, NULL as description, 'def' as name";
@@ -902,6 +970,8 @@ Order by p.Id";
             product.Name.IsEqualTo("abc");
             product.Category.IsNull();
         }
+
+        [Test]
         public async Task TestMultiMapWithSplitWithNullValueAndSpoofColumn() // http://stackoverflow.com/q/10744728/4499Async06
         {
             var sql = @"select 1 as id, 'abc' as name, 1 as spoof, NULL as description, 'def' as name";
@@ -918,6 +988,8 @@ Order by p.Id";
             product.Category.Name.IsEqualTo("def");
             product.Category.Description.IsNull();
         }
+
+        [Test]
         public async Task TestFieldsAndPrivatesAsync()
         {
             var data = await connection.Query<TestFieldCaseAndPrivatesEntity>(
@@ -949,6 +1021,7 @@ Order by p.Id";
             }
         }
 
+        [Test]
         public async Task TestMultiReaderBasicAsync()
         {
             var sql = @"select 1 as Id union all select 2 as Id     select 'abc' as name   select 1 as Id union all select 2 as Id";
@@ -964,6 +1037,8 @@ Order by p.Id";
             Assert.IsEqualTo(s, "abc");
             Assert.IsEqualTo(j, 3);
         }
+
+        [Test]
         public async Task TestMultiMappingVariationsAsync()
         {
             var sql = @"select 1 as Id, 'a' as Content, 2 as Id, 'b' as Content, 3 as Id, 'c' as Content, 4 as Id, 'd' as Content, 5 as Id, 'e' as Content";
@@ -1021,6 +1096,7 @@ Order by p.Id";
             public string Derived2 { get; private set; }
         }
 
+        [Test]
         public async Task TestInheritanceAsync()
         {
             // Test that inheritance works.
@@ -1047,6 +1123,7 @@ Order by p.Id";
             public string Name { get; set; }
         }
 
+        [Test]
         public async Task MultiRSSqlCEAsync()
         {
             if (File.Exists("Test.sdf"))
@@ -1088,11 +1165,15 @@ Order by p.Id";
         {
             public TestEnum EnumEnum { get; set; }
         }
+
+        [Test]
         public async Task TestEnumWeirdnessAsync()
         {
             (await connection.Query<TestEnumClass>("select cast(1 as tinyint) as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
             (await connection.Query<TestEnumClass>("select null as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(null);
         }
+
+        [Test]
         public async Task TestEnumStringsAsync()
         {
             (await connection.Query<TestEnumClassNoNull>("select 'BLA' as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
@@ -1102,6 +1183,7 @@ Order by p.Id";
             (await connection.Query<TestEnumClass>("select 'bla' as [EnumEnum]").FirstAsync()).EnumEnum.IsEqualTo(TestEnum.Bla);
         }
 
+        [Test]
         public async Task TestSupportForDynamicParametersAsync()
         {
             var p = new DynamicParameters();
@@ -1112,6 +1194,8 @@ Order by p.Id";
 
             p.Get<int>("age").IsEqualTo(11);
         }
+
+        [Test]
         public async Task TestSupportForExpandoObjectParametersAsync()
         {
             dynamic p = new ExpandoObject();
@@ -1121,6 +1205,7 @@ Order by p.Id";
             result.IsEqualTo("bob");
         }
 
+        [Test]
         public async Task TestProcSupportAsync()
         {
             var p = new DynamicParameters();
@@ -1144,6 +1229,7 @@ end");
 
         }
 
+        [Test]
         public async Task TestDbStringAsync()
         {
             var obj = await connection.Query("select datalength(@a) as a, datalength(@b) as b, datalength(@c) as c, datalength(@d) as d, datalength(@e) as e, datalength(@f) as f",
@@ -1183,6 +1269,7 @@ end");
             public string Name { get; set; }
         }
 
+        [Test]
         public async Task TestFlexibleMultiMappingAsync()
         {
             var sql =
@@ -1204,6 +1291,7 @@ end");
 
         }
 
+        [Test]
         public async Task TestMultiMappingWithSplitOnSpaceBetweenCommasAsync()
         {
             var sql = @"select 
@@ -1224,13 +1312,13 @@ end");
 
         }
 
+        [Test]
         public async Task TestFastExpandoSupportsIDictionaryAsync()
         {
             var row = (await connection.Query("select 1 A, 'two' B").FirstAsync()) as IDictionary<string, object>;
             row["A"].IsEqualTo(1);
             row["B"].IsEqualTo("two");
         }
-
 
         class PrivateDan
         {
@@ -1243,6 +1331,8 @@ end");
                 }
             }
         }
+
+        [Test]
         public async Task TestDapperSetsPrivatesAsync()
         {
             (await connection.Query<PrivateDan>("select 'one' ShadowInDB").FirstAsync()).Shadow.IsEqualTo(1);
@@ -1285,6 +1375,7 @@ end");
         }
 
         // SQL Server specific test to demonstrate TVP 
+        [Test]
         public async Task TestTVPAsync()
         {
             try
@@ -1349,6 +1440,7 @@ end");
             }
         }
 
+        [Test]
         public async Task TestTVPWithAdditionalParamsAsync()
         {
             try
@@ -1417,6 +1509,7 @@ end");
             }
         }
 
+        [Test]
         public async Task TestTVPWithAnonymousObjectAsync()
         {
             try
@@ -1453,6 +1546,8 @@ end");
         {
             public int Id { get; set; }
         }
+
+        [Test]
         public async Task ParentChildIdentityAssociationsAsync()
         {
             var lookup = new Dictionary<int, Parent>();
@@ -1491,6 +1586,8 @@ end");
             public GenericUriParser Foo { get; set; }
             public int Bar { get; set; }
         }
+
+        [Test]
         public async Task TestUnexpectedDataMessageAsync()
         {
             string msg = null;
@@ -1505,6 +1602,8 @@ end");
             }
             msg.IsEqualTo("The member Foo of type System.GenericUriParser cannot be used as a parameter value");
         }
+
+        [Test]
         public async Task TestUnexpectedButFilteredDataMessageAsync()
         {
             int i = await connection.Query<int>("select @Bar", new WithBizarreData { Foo = new GenericUriParser(GenericUriParserOptions.Default), Bar = 23 }).SingleAsync();
@@ -1517,6 +1616,8 @@ end");
             public char Value { get; set; }
             public char? ValueNullable { get; set; }
         }
+
+        [Test]
         public async Task TestCharInputAndOutputAsync()
         {
             const char test = '〠';
@@ -1528,6 +1629,8 @@ end");
 
             obj.Value.IsEqualTo(test);
         }
+
+        [Test]
         public async Task TestNullableCharInputAndOutputNonNullAsync()
         {
             char? test = '〠';
@@ -1539,6 +1642,8 @@ end");
 
             obj.ValueNullable.IsEqualTo(test);
         }
+
+        [Test]
         public async Task TestNullableCharInputAndOutputNullAsync()
         {
             char? test = null;
@@ -1550,6 +1655,8 @@ end");
 
             obj.ValueNullable.IsEqualTo(test);
         }
+
+        [Test]
         public async Task TestInvalidSplitCausesNiceErrorAsync()
         {
             try
@@ -1570,16 +1677,14 @@ end");
                 // expecting an app exception due to multi mapping being bodged 
             }
         }
-
-
-
+        
         class Comment
         {
             public int Id { get; set; }
             public string CommentData { get; set; }
         }
 
-
+        [Test]
         public async Task TestMultiMapThreeTypesWithGridReaderAsync()
         {
             var createSql = @"
@@ -1618,6 +1723,7 @@ Order by p.Id";
             await connection.Execute("drop table #Users drop table #Posts drop table #Comments");
         }
 
+        [Test]
         public async Task TestReadDynamicWithGridReaderAsync()
         {
             var createSql = @"
@@ -1650,6 +1756,7 @@ Order by p.Id";
             await connection.Execute("drop table #Users drop table #Posts");
         }
 
+        [Test]
         public async Task TestDynamicParamNullSupportAsync()
         {
             var p = new DynamicParameters();
@@ -1673,6 +1780,8 @@ Order by p.Id";
 #pragma warning restore 0649
             public string Name { get; set; }
         }
+
+        [Test]
         public async Task TestMultiMapperIsNotConfusedWithUnorderedColsAsync()
         {
             var result = await connection.Query<Foo1, Bar1, Tuple<Foo1, Bar1>>("select 1 as Id, 2 as BarId, 3 as BarId, 'a' as Name", (f, b) => Tuple.Create(f, b), splitOn: "BarId").FirstAsync();
@@ -1682,6 +1791,8 @@ Order by p.Id";
             result.Item2.BarId.IsEqualTo(3);
             result.Item2.Name.IsEqualTo("a");
         }
+
+        [Test]
         public async Task TestLinqBinaryToClassAsync()
         {
             byte[] orig = new byte[20];
@@ -1693,6 +1804,7 @@ Order by p.Id";
             output.ToArray().IsSequenceEqualTo(orig);
         }
 
+        [Test]
         public async Task TestLinqBinaryRawAsync()
         {
             byte[] orig = new byte[20];
@@ -1708,20 +1820,21 @@ Order by p.Id";
         {
             public System.Data.Linq.Binary Value { get; set; }
         }
-
-
+        
         class WithPrivateConstructor
         {
             public int Foo { get; set; }
             private WithPrivateConstructor() { }
         }
 
+        [Test]
         public async Task TestWithNonPublicConstructorAsync()
         {
             var output = await connection.Query<WithPrivateConstructor>("select 1 as Foo").FirstAsync();
             output.Foo.IsEqualTo(1);
         }
 
+        [Test]
         public async Task TestAppendingAnonClassesAsync()
         {
             DynamicParameters p = new DynamicParameters();
@@ -1736,6 +1849,7 @@ Order by p.Id";
             ((int)result.d).IsEqualTo(4);
         }
 
+        [Test]
         public async Task TestAppendingADictionaryAsync()
         {
             var dictionary = new Dictionary<string, object>();
@@ -1751,6 +1865,7 @@ Order by p.Id";
             ((string)result.b).IsEqualTo("two");
         }
 
+        [Test]
         public async Task TestAppendingAnExpandoObjectAsync()
         {
             dynamic expando = new System.Dynamic.ExpandoObject();
@@ -1766,6 +1881,7 @@ Order by p.Id";
             ((string)result.b).IsEqualTo("two");
         }
 
+        [Test]
         public async Task TestAppendingAListAsync()
         {
             DynamicParameters p = new DynamicParameters();
@@ -1779,6 +1895,7 @@ Order by p.Id";
             result[2].IsEqualTo(3);
         }
 
+        [Test]
         public async Task TestAppendingAListAsDictionaryAsync()
         {
             DynamicParameters p = new DynamicParameters();
@@ -1794,6 +1911,7 @@ Order by p.Id";
             result[2].IsEqualTo(3);
         }
 
+        [Test]
         public async Task TestAppendingAListByNameAsync()
         {
             DynamicParameters p = new DynamicParameters();
@@ -1807,18 +1925,23 @@ Order by p.Id";
             result[2].IsEqualTo(3);
         }
 
+        [Test]
         public async Task TestUniqueIdentifierAsync()
         {
             var guid = Guid.NewGuid();
             var result = await connection.Query<Guid>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).SingleAsync();
             result.IsEqualTo(guid);
         }
+
+        [Test]
         public async Task TestNullableUniqueIdentifierNonNullAsync()
         {
             Guid? guid = Guid.NewGuid();
             var result = await connection.Query<Guid?>("declare @foo uniqueidentifier set @foo = @guid select @foo", new { guid }).SingleAsync();
             result.IsEqualTo(guid);
         }
+
+        [Test]
         public async Task TestNullableUniqueIdentifierNullAsync()
         {
             Guid? guid = null;
@@ -1826,14 +1949,14 @@ Order by p.Id";
             result.IsEqualTo(guid);
         }
 
-
+        [Test]
         public async Task WorkDespiteHavingWrongStructColumnTypesAsync()
         {
             var hazInt = await connection.Query<CanHazInt>("select cast(1 as bigint) Value").SingleAsync();
 			hazInt.Value.IsEqualTo(1);
         }
 
-
+        [Test]
         public async Task TestProcWithOutParameterAsync()
         {
             await connection.Execute(
@@ -1854,6 +1977,8 @@ Order by p.Id";
             await connection.Execute("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
             args.Get<int>("ID").IsEqualTo(7);
         }
+
+        [Test]
         public async Task TestProcWithOutAndReturnParameterAsync()
         {
             await connection.Execute(
@@ -1881,6 +2006,8 @@ Order by p.Id";
         {
             public int Value { get; set; }
         }
+
+        [Test]
         public async Task TestInt16UsageAsync()
         {
             (await connection.Query<short>("select cast(42 as smallint)").SingleAsync()).IsEqualTo((short)42);
@@ -1909,6 +2036,8 @@ Order by p.Id";
             row.NonNullableInt16Enum.IsEqualTo(ShortEnum.Six);
             row.NullableInt16Enum.IsEqualTo((ShortEnum?)null);
         }
+
+        [Test]
         public async Task TestInt32UsageAsync()
         {
             (await connection.Query<int>("select cast(42 as int)").SingleAsync()).IsEqualTo((int)42);
@@ -1961,6 +2090,7 @@ Order by p.Id";
             Zero = 0, One = 1, Two = 2, Three = 3, Four = 4, Five = 5, Six = 6
         }
 
+        [Test]
         public async Task TestTransactionCommitAsync()
         {
             try
@@ -1982,6 +2112,7 @@ Order by p.Id";
             }
         }
 
+        [Test]
         public async Task TestTransactionRollbackAsync()
         {
             await connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
@@ -2003,6 +2134,7 @@ Order by p.Id";
             }
         }
 
+        [Test]
         public async Task TestReaderWhenResultsChangeAsync()
         {
             try
@@ -2044,6 +2176,7 @@ Order by p.Id";
             public int Z { get; set; }
         }
 
+        [Test]
         public async Task TestCustomTypeMapAsync()
         {
             // default mapping
@@ -2083,7 +2216,8 @@ Order by p.Id";
             public long C { get; set; }
             public bool D { get; set; }
         }
-        
+
+        [Test]
         public async Task TestWrongTypes_WithRightTypesAsync()
         {
             var item = await connection.Query<WrongTypes>("select 1 as A, cast(2.0 as float) as B, cast(3 as bigint) as C, cast(1 as bit) as D").SingleAsync();
@@ -2092,7 +2226,8 @@ Order by p.Id";
 			item.C.IsEqualTo(3L);
 			item.D.IsEqualTo(true);
         }
-        
+
+        [Test]
         public async Task TestWrongTypes_WithWrongTypesAsync()
         {
             var item = await connection.Query<WrongTypes>("select cast(1.0 as float) as A, 2 as B, 3 as C, cast(1 as bigint) as D").SingleAsync();
@@ -2102,6 +2237,7 @@ Order by p.Id";
 			item.D.IsEqualTo(true);
         }
 
+        [Test]
         public async Task Test_AddDynamicParametersRepeatedShouldWorkAsync()
         {
             var args = new DynamicParameters();
@@ -2110,7 +2246,6 @@ Order by p.Id";
             int i = await connection.Query<int>("select @Foo", args).SingleAsync();
             i.IsEqualTo(123);
         }
-
 
         public class ParameterWithIndexer
         {
@@ -2122,6 +2257,7 @@ Order by p.Id";
             }
         }
 
+        [Test]
         public async Task TestParameterWithIndexerAsync()
         {
             await connection.Execute(@"create proc #TestProcWithIndexer 
@@ -2133,6 +2269,7 @@ end");
             var item = await connection.Query<int>("#TestProcWithIndexer", new ParameterWithIndexer(), commandType: CommandType.StoredProcedure).SingleAsync();
         }
 
+        [Test]
         public async Task Issue_40_AutomaticBoolConversionAsync()
         {
             var user = await connection.Query<Issue40_User>("select UserId=1,Email='abc',Password='changeme',Active=cast(1 as tinyint)").SingleAsync();
@@ -2160,6 +2297,8 @@ end");
             if (conn.State != ConnectionState.Closed) throw new InvalidOperationException("should be closed!");
             return conn;
         }
+
+        [Test]
         public async Task ExecuteFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
@@ -2168,14 +2307,18 @@ end");
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
+        
         class Multi1
         {
             public int Id { get; set; }
         }
+        
         class Multi2
         {
             public int Id { get; set; }
         }
+
+        [Test]
         public async Task QueryMultimapFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
@@ -2186,6 +2329,8 @@ end");
                 i.IsEqualTo(5);
             }
         }
+
+        [Test]
         public async Task QueryMultipleAsync2FromClosed()
         {
             using (var conn = GetClosedConnection())
@@ -2200,6 +2345,8 @@ end");
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
+
+        [Test]
         public async Task ExecuteInvalidFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
@@ -2215,6 +2362,8 @@ end");
                 }
             }
         }
+
+        [Test]
         public async Task QueryFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
@@ -2224,6 +2373,8 @@ end");
                 i.IsEqualTo(1);
             }
         }
+
+        [Test]
         public async Task QueryInvalidFromClosedAsync()
         {
             using (var conn = GetClosedConnection())
@@ -2239,6 +2390,8 @@ end");
                 }
             }
         }
+
+        [Test]
         public async Task QueryMultipleAsyncFromClosed()
         {
             using (var conn = GetClosedConnection())
@@ -2251,6 +2404,8 @@ end");
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
+
+        [Test]
         public async Task QueryMultipleAsyncInvalidFromClosed()
         {
             using (var conn = GetClosedConnection())
@@ -2267,6 +2422,7 @@ end");
             }
         }
 
+        [Test]
         public async Task TestMultiSelectAsyncWithSomeEmptyGrids()
         {
             using (var reader = await connection.QueryMultipleAsync("select 1; select 2 where 1 = 0; select 3 where 1 = 0; select 4;"))
@@ -2292,6 +2448,7 @@ end");
             }
         }
 
+        [Test]
         public async Task TestDynamicMutation()
         {
             var obj = await connection.Query("select 1 as [a], 2 as [b], 3 as [c]").SingleAsync();
@@ -2320,6 +2477,7 @@ end");
             }
         }
 
+        [Test]
         public async Task TestIssue131Async()
         {
             var results = await connection.Query<dynamic, int, dynamic>(
@@ -2340,6 +2498,7 @@ end");
         }
 
         // see http://stackoverflow.com/questions/13127886/dapper-returns-null-for-singleordefaultdatediff
+        [Test]
         public async Task TestNullFromInt_NoRowsAsync()
         {
             var result = await connection.Query<int>( // case with rows
@@ -2355,7 +2514,8 @@ end");
 
         }
 
-		public async Task TestDapperTableMetadataRetrievalAsync()
+        [Test]
+        public async Task TestDapperTableMetadataRetrievalAsync()
 		{
 			// Test for a bug found in CS 51509960 where the following sequence would result in an InvalidOperationException being
 			// thrown due to an attempt to access a disposed of DataReader:

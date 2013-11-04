@@ -1,12 +1,22 @@
-﻿using System.Linq;
+﻿using System.Data.SqlClient;
+using System.Linq;
+using NUnit.Framework;
 
 namespace SqlChic.Tests
 {
     public class Tests45
     {
+        private SqlConnection GetOpenConnection()
+        {
+            var connection = new SqlConnection("Data Source=.;Initial Catalog=tempdb;Integrated Security=True;MultipleActiveResultSets=True");
+            connection.Open();
+            return connection;
+        }
+
+        [Test]
         public void TestBasicStringUsageAsync()
         {
-            using (var connection = Program.GetOpenConnection())
+            using (var connection = GetOpenConnection())
             {
                 var query = connection.QueryAsync<string>("select 'abc' as [Value] union all select @txt", new { txt = "def" });
                 var arr = query.Result.ToArray();
@@ -14,9 +24,10 @@ namespace SqlChic.Tests
             }
         }
 
+        [Test]
         public void TestClassWithStringUsageAsync()
         {
-            using (var connection = Program.GetOpenConnection())
+            using (var connection = GetOpenConnection())
             {
                 var query = connection.QueryAsync<BasicType>("select 'abc' as [Value] union all select @txt", new { txt = "def" });
                 var arr = query.Result.ToArray();
@@ -24,10 +35,11 @@ namespace SqlChic.Tests
             }
         }
 
+        [Test]
         public void TestMultiMapWithSplitAsync()
         {
             var sql = @"select 1 as id, 'abc' as name, 2 as id, 'def' as name";
-            using (var connection = Program.GetOpenConnection())
+            using (var connection = GetOpenConnection())
             {
                 var productQuery = connection.QueryAsync<Product, Category, Product>(sql, (prod, cat) =>
                 {
