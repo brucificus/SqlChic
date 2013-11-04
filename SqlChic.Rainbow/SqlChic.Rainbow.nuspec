@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>SqlChic.Rainbow</id>
+    <version>0.1.2</version>
+    <title>SqlChic.Rainbow</title>
+    <authors>Sam Saffron,Bruce Markham</authors>
+    <owners>Bruce Markham</owners>
+    <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
+    <projectUrl>http://code.google.com/p/dapper-dot-net/</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>
+      Trivial micro-orm implemented on SqlChic, provides with CRUD helpers. 
+    </description>
+    <summary>
+      Fork of Dapper.Rainbow for SqlChic.
+      A demo of the original is available at https://gist.github.com/1599013 .
+      The original implementation was extracted from http://data.stackexchange.com source at: http://code.google.com/p/stack-exchange-data-explorer/ .
+      Data explorer uses "Rainbow" exclusively for all database access.
+    </summary>
+    <releaseNotes>
+      * version 0.1:
+      Fork of Dapper.Rainbow for SqlChic.
+      A demo of the original is available at https://gist.github.com/1599013 .
+      The original implementation was extracted from http://data.stackexchange.com source at: http://code.google.com/p/stack-exchange-data-explorer/ .
+      Data explorer uses "Rainbow" exclusively for all database access.
+    </releaseNotes>
+    <copyright>Copyright Sam Saffron 2012</copyright>
+    <tags>orm dapper micro-orm sqlchic async</tags>
+    <dependencies>
+      <dependency id="SqlChic" version="1.8" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\SqlChic.Rainbow.dll" target="lib\net45" />
+  </files>
+</package>
