@@ -8,5 +8,4 @@ NuGet.exe
 *.user
 *.nupkg
 .docstats
-
 /packages
