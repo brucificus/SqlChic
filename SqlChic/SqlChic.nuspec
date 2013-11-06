@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata schemaVersion="2">
+    <id>SqlChic</id>
+    <version>0.1</version>
+    <title>SqlChic</title>
+    <authors>Sam Saffron,Marc Gravell,Bruce Markham</authors>
+    <owners>Bruce Markham</owners>
+    <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
+    <projectUrl>http://code.google.com/p/dapper-dot-net/</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A high performance Micro-ORM supporting Sql Server, MySQL, Sqlite, SqlCE, Firebird etc., with full async support.</description>
+    <summary>A high performance fully async Micro-ORM.</summary>
+    <tags>orm sql micro-orm dapper async sqlchic</tags>
+    <dependencies>
+      <dependency id="Rx-Core" version="2.1.30214.0" />
+      <dependency id="Rx-Interfaces" version="2.1.30214.0" />
+      <dependency id="Rx-Linq" version="2.1.30214.0" />
+      <dependency id="Rx-Main" version="2.1.30214.0" />
+      <dependency id="Rx-PlatformServices" version="2.1.30214.0" />
+    </dependencies>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="System.Core"/>
+      <frameworkAssembly assemblyName="System"/>
+      <frameworkAssembly assemblyName="System.Data"/>
+      <frameworkAssembly assemblyName="Microsoft.CSharp" targetFramework=".NETFramework4.0-Client, .NETFramework4.0" />
+    </frameworkAssemblies>
+    <releaseNotes>
+* SqlChic 0.1
+*        - Refactored API to be fully async/await compliant, including IObservable where needed
+* Dapper 1.13   
+*        - Added support for Table Valued Parameters as part of anonymous objects
+*        - Added support for async
+*        - Added support for sharing strategies between databases
+*        - Rewrote dynamic implementation
+* Dapper 1.12.1 
+*        - Minor deploy glitch (should now include intellisense files!)
+* Dapper 1.12   
+*        - Better automatic type-mapping (int vs long, float vs double, etc)
+*        - Fixed: bug with indexer properties
+* Dapper 1.11   
+*        - Custom type-map support
+* Dapper 1.10
+*        - Fixed: error-handling could lose original exception if reader closed
+* Dapper 1.9    
+*        - Added: better schema change detection
+*        - Fixed: enum support for T in Query-of-T
+*        - Added: dictionary support for parameters
+    </releaseNotes>
+    <copyright>Copyright 2013 Sam Saffron, Bruce Markham</copyright>
+  </metadata>
+  <files>
+    <file src="bin\Release\SqlChic.dll" target="lib\net45" />
+    <file src="bin\Release\SqlChic.pdb" target="lib\net45" />
+    <file src="bin\Release\SqlChic.xml" target="lib\net45" />
+  </files>
+</package>
