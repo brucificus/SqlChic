@@ -241,8 +241,12 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="NHibernate\hibernate.cfg.xml" />
-    <Content Include="NHibernate\Post.hbm.xml" />
+    <Content Include="NHibernate\hibernate.cfg.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="NHibernate\Post.hbm.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="OrmLite\ServiceStack.Common.dll" />
     <Content Include="OrmLite\ServiceStack.Interfaces.dll" />
     <Content Include="OrmLite\ServiceStack.OrmLite.dll" />
