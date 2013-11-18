@@ -179,6 +179,8 @@ namespace SqlChic.PerfTests
 
 			AddTests_SqlChic(tests);
 
+			AddTests_Dapper(tests);
+
 			AddTests_PetaPoco(tests, concurrency);
 
 			AddTests_Subsonic(tests, concurrency);
@@ -450,25 +452,99 @@ namespace SqlChic.PerfTests
 
 	    private static void AddTests_SqlChic(Tests tests)
 	    {
-		    var mapperConnectionClosed1 = Program.GetClosedConnection();
-			var mapperConnectionClosed2 = Program.GetClosedConnection();
-		    var mapperConnectionOpen1 = Program.GetOpenConnection();
-			var mapperConnectionOpen2 = Program.GetOpenConnection();
+		    tests.Add(id =>
+			    {
+					using(var connection = Program.GetClosedConnection())
+					connection.Query<Post>("select * from Posts where Id = @Id", new {Id = id}).FirstAsync();
+			    },
+				"SqlChic (Buffered)");
 
-		    tests.Add(id => mapperConnectionClosed1.Query<Post>("select * from Posts where Id = @Id", new {Id = id}).FirstAsync(),
-				()=>mapperConnectionClosed1.Dispose(),	  
-				"SqlChic Query (Buffered)");
-		    tests.Add(id => mapperConnectionOpen1.Query<Post>("select * from Posts where Id = @Id", new {Id = id}).FirstAsync(),
-				()=>mapperConnectionOpen1.Dispose(),	  
-				"SqlChic Query (Non-buffered)");
+		    tests.Add(id =>
+			    {
+					using(var connection = Program.GetOpenConnection())
+					connection.Query<Post>("select * from Posts where Id = @Id", new {Id = id}).FirstAsync();
+			    },
+				"SqlChic (Non-buffered)");
 
-		    tests.Add(id => mapperConnectionClosed2.Query("select * from Posts where Id = @Id", new {Id = id}).FirstAsync(),
-				()=>mapperConnectionClosed2.Dispose(),	  
-				"Dynamic SqlChic Query (Buffered)");
-		    tests.Add(id => mapperConnectionOpen2.Query("select * from Posts where Id = @Id", new {Id = id}).FirstAsync(),
-				()=>mapperConnectionOpen2.Dispose(),	  
-				"Dynamic SqlChic Query (Non-buffered)");
+		    tests.Add(id =>
+			    {
+					using(var connection = Program.GetClosedConnection())
+					connection.Query("select * from Posts where Id = @Id", new {Id = id}).FirstAsync();
+			    },
+				"SqlChic (Dynamic, Buffered)");
+
+			tests.Add(id =>
+				{
+					using(var connection = Program.GetOpenConnection())
+					connection.Query("select * from Posts where Id = @Id", new {Id = id}).FirstAsync();
+				},
+				"SqlChic (Dynamic, Non-buffered)");
 	    }
+
+		private static void AddTests_Dapper(Tests tests)
+		{
+			tests.Add(id =>
+				{
+					using (var connection = Program.GetClosedConnection())
+					{
+						global::Dapper.SqlMapper.Query<Post>(connection, "select * from Posts where Id = @Id", new {Id = id}).First();
+					}
+				},
+				"Dapper (Buffered, Sync)");
+
+			tests.Add(id =>
+				{
+					using (var connection = Program.GetOpenConnection())
+					{
+						global::Dapper.SqlMapper.Query<Post>(connection, "select * from Posts where Id = @Id", new {Id = id}).First();
+					}
+				},
+				"Dapper (Non-buffered, Sync)");
+
+			tests.Add(id =>
+				{
+					using (var connection = Program.GetClosedConnection())
+					{
+						global::Dapper.SqlMapper.Query<dynamic>(connection, "select * from Posts where Id = @Id", new {Id = id}).First();
+					}
+				},
+				"Dapper (Dynamic, Buffered, Sync)");
+
+			tests.Add((Action<int>)(id =>
+				{
+					using (var connection = Program.GetOpenConnection())
+					{
+						global::Dapper.SqlMapper.Query<dynamic>(connection, "select * from Posts where Id = @Id", new {Id = id}).First();
+					}
+				}),
+				"Dapper (Dynamic, Non-buffered, Sync)");
+
+			//tests.Add(async id => (await global::Dapper.SqlMapper.QueryAsync<Post>(mapperConnectionClosed3, "select * from Posts where Id = @Id", new { Id = id })).First(),
+			//	() => mapperConnectionClosed3.Dispose(),
+			//	"Dapper (Buffered, Async)");
+			
+			tests.Add(async (int id) =>
+				{
+					using (var connection = Program.GetOpenConnection())
+					{
+						(await global::Dapper.SqlMapper.QueryAsync<Post>(connection, "select * from Posts where Id = @Id", new {Id = id})).First();
+					}
+				},
+				"Dapper (Non-buffered, Async)");
+
+			//tests.Add((Func<int,Task>)(async id => (await global::Dapper.SqlMapper.QueryAsync<dynamic>(mapperConnectionClosed4, "select * from Posts where Id = @Id", new { Id = id })).First()),
+			//	() => mapperConnectionClosed4.Dispose(),
+			//	"Dapper (Dynamic, Buffered, Async)");
+
+			tests.Add(async id =>
+				{
+					using (var connection = Program.GetOpenConnection())
+					{
+						(await global::Dapper.SqlMapper.QueryAsync<dynamic>(connection, "select * from Posts where Id = @Id", new {Id = id})).First();
+					}
+				},
+				"Dapper (Dynamic, Non-buffered, Async)");
+		}
 
 	    private static void AddTests_EntityFramework(Tests tests, int concurrency)
 	    {
