@@ -39,12 +39,74 @@ namespace SqlChic.PerfTests
             return connection;
         }
 
+        public static SqlConnection GetClosedConnection()
+        {
+            var connection = new SqlConnection(connectionString);
+            return connection;
+        }
+
         static void RunPerformanceTests()
         {
             var test = new PerformanceTests();
-            const int iterations = 1000;
-            Console.WriteLine("Running {0} iterations that load up a post entity", iterations);
-            test.Run(iterations);
+
+            int baseConcurrency = System.Environment.ProcessorCount;
+
+            const int warmupIterations = 2000;
+            Console.WriteLine("Warming up by running {0} iterations that load up a post entity", warmupIterations);
+            test.Run(warmupIterations, 1, (tn, tt) => { });
+
+            RunGcCollect();
+
+            const int iterations = 2000;
+            Console.WriteLine("Running {0} iterations that load up a post entity, no concurrency", iterations);
+            test.Run(iterations, 1, LogTestToConsole);
+
+			test = new PerformanceTests();
+            RunGcCollect();
+
+            if (baseConcurrency > 1)
+            {
+                Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ 1xCPU ({1})", iterations, baseConcurrency);
+                test.Run(iterations, baseConcurrency, LogTestToConsole);
+
+				test = new PerformanceTests();
+				RunGcCollect();
+
+                Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ 2xCPU ({1})", iterations, 2 * baseConcurrency);
+                test.Run(iterations, 2 * baseConcurrency, LogTestToConsole);
+
+				test = new PerformanceTests();
+				RunGcCollect();
+
+                Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ 4xCPU ({1})", iterations, 4 * baseConcurrency);
+                test.Run(iterations, 4 * baseConcurrency, LogTestToConsole);
+
+                if ((baseConcurrency ^ 2) > (baseConcurrency*4))
+                {
+					test = new PerformanceTests();
+					RunGcCollect();
+
+                    Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ CPU^2 ({1})", iterations, baseConcurrency ^ 2);
+                    test.Run(iterations, baseConcurrency ^ 2, LogTestToConsole);                    
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("Unable to test concurrency due to lack of CPUs");
+            }
+        }
+
+        private static void RunGcCollect()
+        {
+            Console.WriteLine();
+            Console.WriteLine("Running GC Collect");
+            GC.Collect(1, GCCollectionMode.Forced, true);
+            Console.WriteLine();
+        }
+
+        private static void LogTestToConsole(string testName, TimeSpan totalTestTime)
+        {
+            Console.WriteLine("{0} \t{1}ms", testName, totalTestTime.TotalMilliseconds);
         }
 
         static void Main()
@@ -52,13 +114,16 @@ namespace SqlChic.PerfTests
 
 #if DEBUG
             throw new InvalidOperationException("Performance tests should not be run in DEBUG.");
-#else 
-            EnsureDBSetup();
-            RunPerformanceTests();
+#else
+			EnsureDBSetup();
+			RunPerformanceTests();
 #endif
-            Console.WriteLine("(end of tests; press any key)");
 
-            Console.ReadKey();
+            if (System.Diagnostics.Debugger.IsAttached)
+            {
+                Console.WriteLine("(end of tests; press any key)");
+                Console.ReadKey();
+            }
         }
 
         private static void EnsureDBSetup()
