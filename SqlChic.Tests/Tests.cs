@@ -97,7 +97,7 @@ namespace SqlChic.Tests
                 insert #Posts values(1, 99, 'Sams Post1')
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')";
-                await connection.Execute(createSql);
+                await connection.ExecuteAsync(createSql);
                 string sql = @"select * from #Posts p 
                            left join #Users u on u.Id = p.OwnerId 
                            Order by p.Id";
@@ -117,7 +117,7 @@ namespace SqlChic.Tests
 
                 data[2].Owner.IsNull();
 
-                await connection.Execute("drop table #Users drop table #Posts");
+                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -424,15 +424,15 @@ namespace SqlChic.Tests
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
+                await connection.ExecuteAsync("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
                 var d = await connection.Query<Dog>("select * from #dog").SingleAsync();
                 d.Name.IsEqualTo("Alf");
                 d.Age.IsEqualTo(1);
-                await connection.Execute("alter table #dog drop column Name");
+                await connection.ExecuteAsync("alter table #dog drop column Name");
                 d = await connection.Query<Dog>("select * from #dog").SingleAsync();
                 d.Name.IsNull();
                 d.Age.IsEqualTo(1);
-                await connection.Execute("drop table #dog");
+                await connection.ExecuteAsync("drop table #dog");
             }
         }
 
@@ -441,7 +441,7 @@ namespace SqlChic.Tests
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
+                await connection.ExecuteAsync("create table #dog(Age int, Name nvarchar(max)) insert #dog values(1, 'Alf')");
                 var tuple = await connection.Query<Dog, Dog, Tuple<Dog, Dog>>("select * from #dog d1 join #dog d2 on 1=1", (d1, d2) => Tuple.Create(d1, d2), splitOn: "Age").SingleAsync();
 
                 tuple.Item1.Name.IsEqualTo("Alf");
@@ -449,7 +449,7 @@ namespace SqlChic.Tests
                 tuple.Item2.Name.IsEqualTo("Alf");
                 tuple.Item2.Age.IsEqualTo(1);
 
-                await connection.Execute("alter table #dog drop column Name");
+                await connection.ExecuteAsync("alter table #dog drop column Name");
                 tuple = await connection.Query<Dog, Dog, Tuple<Dog, Dog>>("select * from #dog d1 join #dog d2 on 1=1", (d1, d2) => Tuple.Create(d1, d2), splitOn: "Age").SingleAsync();
 
                 tuple.Item1.Name.IsNull();
@@ -457,7 +457,7 @@ namespace SqlChic.Tests
                 tuple.Item2.Name.IsNull();
                 tuple.Item2.Age.IsEqualTo(1);
 
-                await connection.Execute("drop table #dog");
+                await connection.ExecuteAsync("drop table #dog");
             }
         }
 
@@ -541,7 +541,7 @@ WHERE (first_name LIKE {0} OR last_name LIKE {0});";
                 string query = String.Format(formatted, allow_start_wildcards ? use_both : use_end_only);
                 string term = "F"; // the term the user searched for
 
-                await connection.Execute(@"create table #users16726709 (first_name varchar(200), last_name varchar(200))
+                await connection.ExecuteAsync(@"create table #users16726709 (first_name varchar(200), last_name varchar(200))
 insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('Tony','Farcus') insert #users16726709 values ('Albert','Tenof')");
 
                 // Using Dapper
@@ -694,7 +694,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         {
             using (var connection = GetOpenConnection())
             {
-                (await connection.Execute(@"
+                (await connection.ExecuteAsync(@"
     set nocount on 
     create table #t(i int) 
     set nocount off 
@@ -712,7 +712,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             {
                 var p = new DynamicParameters(new {a = 1, b = 2});
                 p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.Output);
-                await connection.Execute(@"set @c = @a + @b", p);
+                await connection.ExecuteAsync(@"set @c = @a + @b", p);
                 p.Get<int>("@c").IsEqualTo(3);
             }
         }
@@ -722,8 +722,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute("create table #t(i int)");
-                int tally = await connection.Execute(@"insert #t (i) values(@a)", new[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
+                await connection.ExecuteAsync("create table #t(i int)");
+                int tally = await connection.ExecuteAsync(@"insert #t (i) values(@a)", new[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
                 int sum = await connection.Query<int>("select sum(i) from #t drop table #t").FirstAsync();
                 tally.IsEqualTo(4);
                 sum.IsEqualTo(10);
@@ -741,8 +741,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute("create table #t(Name nvarchar(max), Age int)");
-                int tally = await connection.Execute(@"insert #t (Name,Age) values(@Name, @Age)", new List<Student>
+                await connection.ExecuteAsync("create table #t(Name nvarchar(max), Age int)");
+                int tally = await connection.ExecuteAsync(@"insert #t (Name,Age) values(@Name, @Age)", new List<Student>
                     {
                         new Student {Age = 1, Name = "sam"},
                         new Student {Age = 2, Name = "bob"}
@@ -758,8 +758,8 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute("create table #t(i int)");
-                int tally = await connection.Execute(@"insert #t (i) values(@a)", new object[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
+                await connection.ExecuteAsync("create table #t(i int)");
+                int tally = await connection.ExecuteAsync(@"insert #t (i) values(@a)", new object[] { new { a = 1 }, new { a = 2 }, new { a = 3 }, new { a = 4 } });
                 int sum = await connection.Query<int>("select sum(i) from #t drop table #t").FirstAsync();
                 tally.IsEqualTo(4);
                 sum.IsEqualTo(10);
@@ -932,7 +932,7 @@ select * from @bar", new {foo}).SingleAsync();
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')
 ";
-                await connection.Execute(createSql);
+                await connection.ExecuteAsync(createSql);
 
                 var sql =
     @"select * from #Posts p 
@@ -949,7 +949,7 @@ Order by p.Id";
 
                 data[2].Owner.IsNull();
 
-                await connection.Execute("drop table #Users drop table #Posts");
+                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -969,7 +969,7 @@ Order by p.Id";
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')
 ";
-                await connection.Execute(createSql);
+                await connection.ExecuteAsync(createSql);
 
                 var sql =
     @"select p.*, u.Id, u.Name + '0' Name from #Posts p 
@@ -996,7 +996,7 @@ Order by p.Id
                     data[2].Owner.IsNull();
                 }
 
-                await connection.Execute("drop table #Users drop table #Posts");
+                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -1077,7 +1077,7 @@ Order by p.Id
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')
 ";
-                await connection.Execute(createSql);
+                await connection.ExecuteAsync(createSql);
 
                 var sql =
     @"select * from #Posts p 
@@ -1095,7 +1095,7 @@ Order by p.Id";
 
                 ((object)data[2].Owner).IsNull();
 
-                await connection.Execute("drop table #Users drop table #Posts");
+                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -1326,12 +1326,12 @@ Order by p.Id";
             {
                 await cnn.OpenAsync();
 
-                await cnn.Execute("create table Posts (ID int, Title nvarchar(50), Body nvarchar(50), AuthorID int)");
-                await cnn.Execute("create table Authors (ID int, Name nvarchar(50))");
+                await cnn.ExecuteAsync("create table Posts (ID int, Title nvarchar(50), Body nvarchar(50), AuthorID int)");
+                await cnn.ExecuteAsync("create table Authors (ID int, Name nvarchar(50))");
 
-                await cnn.Execute("insert Posts values (1,'title','body',1)");
-                await cnn.Execute("insert Posts values(2,'title2','body2',null)");
-                await cnn.Execute("insert Authors values(1,'sam')");
+                await cnn.ExecuteAsync("insert Posts values (1,'title','body',1)");
+                await cnn.ExecuteAsync("insert Posts values(2,'title2','body2',null)");
+                await cnn.ExecuteAsync("insert Authors values(1,'sam')");
 
                 var data = await cnn.Query<PostCE, AuthorCE, PostCE>(@"select * from Posts p left join Authors a on a.ID = p.AuthorID", (post, author) => { post.Author = author; return post; }).ToList();
                 var firstPost = data.First();
@@ -1416,7 +1416,7 @@ Order by p.Id";
                 p.Add("b", dbType: DbType.Int32, direction: ParameterDirection.Output);
                 p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
 
-                await connection.Execute(@"create proc #TestProc 
+                await connection.ExecuteAsync(@"create proc #TestProc 
 	@a int,
 	@b int output
 as 
@@ -1604,8 +1604,8 @@ end");
             {
                 try
                 {
-                    await connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                    await connection.Execute("CREATE PROC get_ints @ints int_list_type READONLY AS select * from @ints");
+                    await connection.ExecuteAsync("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
+                    await connection.ExecuteAsync("CREATE PROC get_ints @ints int_list_type READONLY AS select * from @ints");
 
                     var nums =
                         await connection.Query<int>("get_ints", new IntDynamicParam(new int[] {1, 2, 3})).ToList();
@@ -1619,11 +1619,11 @@ end");
                 {
                     try
                     {
-                        connection.Execute("DROP PROC get_ints").Wait();
+                        connection.ExecuteAsync("DROP PROC get_ints").Wait();
                     }
                     finally
                     {
-                        connection.Execute("DROP TYPE int_list_type").Wait();
+                        connection.ExecuteAsync("DROP TYPE int_list_type").Wait();
                     }
                 }
             }
@@ -1673,8 +1673,8 @@ end");
             {
                 try
                 {
-                    await connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                    await connection.Execute("CREATE PROC get_values @ints int_list_type READONLY, @stringParam varchar(20), @dateParam datetime AS select i.*, @stringParam as stringParam, @dateParam as dateParam from @ints i");
+                    await connection.ExecuteAsync("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
+                    await connection.ExecuteAsync("CREATE PROC get_values @ints int_list_type READONLY, @stringParam varchar(20), @dateParam datetime AS select i.*, @stringParam as stringParam, @dateParam as dateParam from @ints i");
 
                     var dynamicParameters = new DynamicParameterWithIntTVP(new int[] { 1, 2, 3 });
                     dynamicParameters.AddDynamicParams(new { stringParam = "stringParam", dateParam = new DateTime(2012, 1, 1) });
@@ -1694,11 +1694,11 @@ end");
                 {
                     try
                     {
-                        connection.Execute("DROP PROC get_values").Wait();
+                        connection.ExecuteAsync("DROP PROC get_values").Wait();
                     }
                     finally
                     {
-                        connection.Execute("DROP TYPE int_list_type").Wait();
+                        connection.ExecuteAsync("DROP TYPE int_list_type").Wait();
                     }
                 }
             }
@@ -1745,8 +1745,8 @@ end");
             {
                 try
                 {
-                    await connection.Execute("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                    await connection.Execute("CREATE PROC get_ints @integers int_list_type READONLY AS select * from @integers");
+                    await connection.ExecuteAsync("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
+                    await connection.ExecuteAsync("CREATE PROC get_ints @integers int_list_type READONLY AS select * from @integers");
 
                     var nums = await connection.Query<int>("get_ints", new { integers = new IntCustomParam(new int[] { 1, 2, 3 }) }, commandType: CommandType.StoredProcedure).ToList();
                     nums[0].IsEqualTo(1);
@@ -1759,11 +1759,11 @@ end");
                 {
                     try
                     {
-                        connection.Execute("DROP PROC get_ints").Wait();
+                        connection.ExecuteAsync("DROP PROC get_ints").Wait();
                     }
                     finally
                     {
-                        connection.Execute("DROP TYPE int_list_type").Wait();
+                        connection.ExecuteAsync("DROP TYPE int_list_type").Wait();
                     }
                 }
             }
@@ -1955,7 +1955,7 @@ end");
                 insert #Posts values(3, null, 'no ones post')
 
                 insert #Comments values(1, 1, 'Comment 1')";
-                await connection.Execute(createSql);
+                await connection.ExecuteAsync(createSql);
 
                 var sql = @"SELECT p.* FROM #Posts p
 
@@ -1975,7 +1975,7 @@ Order by p.Id";
                 post2.Owner.Id.IsEqualTo(99);
 
 
-                await connection.Execute("drop table #Users drop table #Posts drop table #Comments");
+                await connection.ExecuteAsync("drop table #Users drop table #Posts drop table #Comments");
             }
         }
 
@@ -1995,7 +1995,7 @@ Order by p.Id";
                 insert #Posts values(2, 99, 'Sams Post2')
                 insert #Posts values(3, null, 'no ones post')";
 
-                await connection.Execute(createSql);
+                await connection.ExecuteAsync(createSql);
 
                 var sql = @"SELECT * FROM #Users ORDER BY Id
                         SELECT * FROM #Posts ORDER BY Id DESC";
@@ -2011,7 +2011,7 @@ Order by p.Id";
                 ((int) users.First().Id).IsEqualTo(2);
                 ((int) posts.First().Id).IsEqualTo(3);
 
-                await connection.Execute("drop table #Users drop table #Posts");
+                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -2023,7 +2023,7 @@ Order by p.Id";
                 var p = new DynamicParameters();
 
                 p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-                await connection.Execute("select @b = null", p);
+                await connection.ExecuteAsync("select @b = null", p);
 
                 p.Get<int?>("@b").IsNull();
             }
@@ -2266,7 +2266,7 @@ Order by p.Id";
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute(
+                await connection.ExecuteAsync(
                     @"CREATE PROCEDURE #TestProcWithOutParameter
         @ID int output,
         @Foo varchar(100),
@@ -2281,7 +2281,7 @@ Order by p.Id";
                     };
                 var args = new DynamicParameters(obj);
                 args.Add("ID", 0, direction: ParameterDirection.Output);
-                await connection.Execute("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
+                await connection.ExecuteAsync("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
                 args.Get<int>("ID").IsEqualTo(7);
             }
         }
@@ -2291,7 +2291,7 @@ Order by p.Id";
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute(
+                await connection.ExecuteAsync(
                     @"CREATE PROCEDURE #TestProcWithOutAndReturnParameter
         @ID int output,
         @Foo varchar(100),
@@ -2308,7 +2308,7 @@ Order by p.Id";
                 var args = new DynamicParameters(obj);
                 args.Add("ID", 0, direction: ParameterDirection.Output);
                 args.Add("result", 0, direction: ParameterDirection.ReturnValue);
-                await connection.Execute("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
+                await connection.ExecuteAsync("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
                 args.Get<int>("ID").IsEqualTo(7);
                 args.Get<int>("result").IsEqualTo(42);
             }
@@ -2414,11 +2414,11 @@ Order by p.Id";
             {
                 try
                 {
-                    await connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
+                    await connection.ExecuteAsync("create table #TransactionTest ([ID] int, [Value] varchar(32));");
 
                     using (var transaction = connection.BeginTransaction())
                     {
-                        await connection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
+                        await connection.ExecuteAsync("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
 
                         transaction.Commit();
                     }
@@ -2427,7 +2427,7 @@ Order by p.Id";
                 }
                 finally
                 {
-                    connection.Execute("drop table #TransactionTest;").Wait();
+                    connection.ExecuteAsync("drop table #TransactionTest;").Wait();
                 }
             }
         }
@@ -2437,13 +2437,13 @@ Order by p.Id";
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute("create table #TransactionTest ([ID] int, [Value] varchar(32));");
+                await connection.ExecuteAsync("create table #TransactionTest ([ID] int, [Value] varchar(32));");
 
                 try
                 {
                     using (var transaction = connection.BeginTransaction())
                     {
-                        await connection.Execute("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
+                        await connection.ExecuteAsync("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
 
                         transaction.Rollback();
                     }
@@ -2452,7 +2452,7 @@ Order by p.Id";
                 }
                 finally
                 {
-                    connection.Execute("drop table #TransactionTest;").Wait();
+                    connection.ExecuteAsync("drop table #TransactionTest;").Wait();
                 }
             }
         }
@@ -2465,7 +2465,7 @@ Order by p.Id";
                 try
                 {
                     await
-                        connection.Execute(
+                        connection.ExecuteAsync(
                             "create table #ResultsChange (X int);create table #ResultsChange2 (Y int);insert #ResultsChange (X) values(1);insert #ResultsChange2 (Y) values(1);");
 
                     var obj1 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
@@ -2482,8 +2482,8 @@ Order by p.Id";
                     obj2.Y.IsEqualTo(1);
                     obj2.Z.IsEqualTo(0);
 
-                    await connection.Execute("alter table #ResultsChange add Z int null");
-                    await connection.Execute("update #ResultsChange set Z = 2");
+                    await connection.ExecuteAsync("alter table #ResultsChange add Z int null");
+                    await connection.ExecuteAsync("update #ResultsChange set Z = 2");
 
                     var obj3 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
                     obj3.X.IsEqualTo(1);
@@ -2501,7 +2501,7 @@ Order by p.Id";
                 }
                 finally
                 {
-                    connection.Execute("drop table #ResultsChange;drop table #ResultsChange2;").Wait();
+                    connection.ExecuteAsync("drop table #ResultsChange;drop table #ResultsChange2;").Wait();
                 }
             }
         }
@@ -2610,7 +2610,7 @@ Order by p.Id";
         {
             using (var connection = GetOpenConnection())
             {
-                await connection.Execute(@"create proc #TestProcWithIndexer 
+                await connection.ExecuteAsync(@"create proc #TestProcWithIndexer 
 	@A int
 as 
 begin
@@ -2650,7 +2650,7 @@ end");
         {
             using (var conn = GetClosedConnection())
             {
-                await conn.Execute("-- nop");
+                await conn.ExecuteAsync("-- nop");
                 conn.State.IsEqualTo(ConnectionState.Closed);
             }
         }
@@ -2700,7 +2700,7 @@ end");
             {
                 try
                 {
-                    await conn.Execute("nop");
+                    await conn.ExecuteAsync("nop");
                     false.IsEqualTo(true); // shouldn't have got here
                 }
                 catch
@@ -2884,11 +2884,11 @@ end");
                 // - Perform a dynamic query that yields no results
                 // - Add data to the source of that query
                 // - Perform a the same query again
-                await connection.Execute("CREATE TABLE #sut (value varchar(10) NOT NULL PRIMARY KEY)");
+                await connection.ExecuteAsync("CREATE TABLE #sut (value varchar(10) NOT NULL PRIMARY KEY)");
                 (await connection.Query("SELECT value FROM #sut").ToList()).IsSequenceEqualTo(
                     Enumerable.Empty<dynamic>());
 
-                (await connection.Execute("INSERT INTO #sut (value) VALUES ('test')")).IsEqualTo(1);
+                (await connection.ExecuteAsync("INSERT INTO #sut (value) VALUES ('test')")).IsEqualTo(1);
                 var result = connection.Query("SELECT value FROM #sut");
 
                 var first = await result.FirstAsync();
@@ -2924,8 +2924,8 @@ end");
             {
                 conn.Open();
                 IDbTransaction transaction = conn.BeginTransaction();
-                conn.Execute("create table tcat ( id serial not null, breed character varying(20) not null, name character varying (20) not null);");
-                conn.Execute("insert tcat(breed, name) values(:breed, :name) ", Cats);
+                conn.ExecuteAsync("create table tcat ( id serial not null, breed character varying(20) not null, name character varying (20) not null);");
+                conn.ExecuteAsync("insert tcat(breed, name) values(:breed, :name) ", Cats);
 
                 var r = conn.Query<Cat>("select * from tcat where id=any(:catids)", new { catids = new[] { 1, 3, 5 } });
                 r.Count().IsEqualTo(3);
