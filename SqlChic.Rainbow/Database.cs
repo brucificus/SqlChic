@@ -281,7 +281,7 @@ namespace SqlChic.Rainbow
 
         public async Task<int> ExecuteAsync(string sql, dynamic param = null)
         {
-            return await SqlMapper.Execute(connection, sql, param as object, transaction, commandTimeout: this.commandTimeout);
+            return await SqlMapper.ExecuteAsync(connection, sql, param as object, transaction, commandTimeout: this.commandTimeout);
         }
 
 		public IObservable<T> Query<T>(string sql, dynamic param = null, bool buffered = true)

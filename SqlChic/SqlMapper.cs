@@ -541,7 +541,7 @@ namespace SqlChic
         /// Execute parameterized SQL  
         /// </summary>
         /// <returns>Number of rows affected</returns>
-        public static async Task<int> Execute(
+        public static async Task<int> ExecuteAsync(
 this DbConnection cnn, string sql, dynamic param = null, DbTransaction transaction = null, int? commandTimeout = null, CommandType? commandType = null
 )
         {
