@@ -26,7 +26,8 @@ namespace SqlChic.PerfTests.Properties {
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.SpecialSettingAttribute(global::System.Configuration.SpecialSetting.ConnectionString)]
-        [global::System.Configuration.DefaultSettingValueAttribute("Data Source=.;Initial Catalog=tempdb;Integrated Security=True")]
+        [global::System.Configuration.DefaultSettingValueAttribute("Data Source=.;Initial Catalog=tempdb;Integrated Security=True;multipleactiveresul" +
+            "tsets=True")]
         public string tempdbConnectionString {
             get {
                 return ((string)(this["tempdbConnectionString"]));
