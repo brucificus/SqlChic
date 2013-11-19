@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Data.SqlClient;
-using System.Reflection;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace SqlChic.PerfTests
 {
@@ -42,48 +39,57 @@ namespace SqlChic.PerfTests
 
         static void RunPerformanceTests()
         {
-            var test = new PerformanceTests();
+	        bool teamCityDetected = DetectTeamCity();
 
             int baseConcurrency = System.Environment.ProcessorCount;
 
             const int warmupIterations = 2000;
-            Console.WriteLine("Warming up by running {0} iterations that load up a post entity", warmupIterations);
-            test.Run(warmupIterations, 1, (tn, tt) => { });
+			const int iterations = 2000;
 
-            RunGcCollect();
+			using (StartLogSection(String.Format("PerfTests warming up", warmupIterations), teamCityDetected))
+			{
+				PerformanceTests.Run(warmupIterations, 1, (tn, tt) => { });
 
-            const int iterations = 2000;
-            Console.WriteLine("Running {0} iterations that load up a post entity, no concurrency", iterations);
-            test.Run(iterations, 1, LogTestToConsole);
+				RunGcCollect();				
+			}
+			Console.WriteLine();
 
-			test = new PerformanceTests();
-            RunGcCollect();
+
+			using (StartLogSection(String.Format("PerfTests @ {0} iterations, no concurrency", iterations), teamCityDetected))
+            {
+				PerformanceTests.Run(iterations, 1, LogTestToConsole);
+				RunGcCollect();
+            }
+
 
             if (baseConcurrency > 1)
             {
-                Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ 1xCPU ({1})", iterations, baseConcurrency);
-                test.Run(iterations, baseConcurrency, LogTestToConsole);
-
-				test = new PerformanceTests();
-				RunGcCollect();
-
-                Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ 2xCPU ({1})", iterations, 2 * baseConcurrency);
-                test.Run(iterations, 2 * baseConcurrency, LogTestToConsole);
-
-				test = new PerformanceTests();
-				RunGcCollect();
-
-                Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ 4xCPU ({1})", iterations, 4 * baseConcurrency);
-                test.Run(iterations, 4 * baseConcurrency, LogTestToConsole);
-
-                if ((baseConcurrency ^ 2) > (baseConcurrency*4))
-                {
-					test = new PerformanceTests();
+				using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 1xCPU ({1})", iterations, baseConcurrency), teamCityDetected))
+				{
+					PerformanceTests.Run(iterations, baseConcurrency, LogTestToConsole);
 					RunGcCollect();
+				}
 
-                    Console.WriteLine("Running {0} iterations that load up a post entity, concurrency @ CPU^2 ({1})", iterations, baseConcurrency ^ 2);
-                    test.Run(iterations, baseConcurrency ^ 2, LogTestToConsole);                    
-                }
+				using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 2xCPU ({1})", iterations, 2*baseConcurrency), teamCityDetected))
+				{
+					PerformanceTests.Run(iterations, 2*baseConcurrency, LogTestToConsole);
+					RunGcCollect();
+				}
+
+				using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 4xCPU ({1})", iterations, 4*baseConcurrency), teamCityDetected))
+				{
+					PerformanceTests.Run(iterations, 4*baseConcurrency, LogTestToConsole);
+				}
+
+				//int baseConcurrencySquared = (int) Math.Pow(baseConcurrency, 2);
+				//if (baseConcurrencySquared > (baseConcurrency * 4))
+				//{
+				//	using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ CPU^2 ({1})", iterations, baseConcurrencySquared), teamCityDetected))
+				//	{
+				//		RunGcCollect();
+				//		PerformanceTests.Run(iterations, baseConcurrencySquared, LogTestToConsole);
+				//	}
+				//}
             }
             else
             {
@@ -152,5 +158,48 @@ end
                 cmd.ExecuteNonQuery();
             }
         }
+
+		private static bool DetectTeamCity()
+		{
+			return !String.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("TEAMCITY_VERSION"));
+		}
+
+		private static IDisposable StartLogSection(string message, bool useTeamCity)
+		{
+			if(!useTeamCity)
+			{
+				Console.Out.WriteLine(message);
+				return OnDispose.DoNothing;
+			}
+			else
+			{
+				Console.WriteLine("##teamcity[progressStart '{0}']", message);
+				return OnDispose.Do(() => Console.WriteLine("##teamcity[progressFinish '{0}']", message));
+			}
+		}
     }
+
+	internal class OnDispose
+		: IDisposable
+	{
+		private readonly Action _action;
+
+		private OnDispose(Action action)
+		{
+			if (action == null) throw new ArgumentNullException("action");
+			_action = action;
+		}
+
+		internal static IDisposable Do(Action action)
+		{
+			return new OnDispose(action);
+		}
+
+		internal static readonly IDisposable DoNothing = Do(() => { });
+
+		public void Dispose()
+		{
+			_action();
+		}
+	}
 }
