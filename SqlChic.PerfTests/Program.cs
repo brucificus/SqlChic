@@ -54,7 +54,7 @@ namespace SqlChic.PerfTests
 			}
 			Console.WriteLine();
 
-			using (var testSuiteLogger = new TestSuiteLogger("perftests.csv", iterations))
+			using (var testSuiteLogger = new TestSuiteLogger("perftests_raw.csv", "perftests_concurrencies.csv", iterations))
 			{
 				using (StartLogSection(String.Format("PerfTests @ {0} iterations, no concurrency", iterations), teamCityDetected))
 				{

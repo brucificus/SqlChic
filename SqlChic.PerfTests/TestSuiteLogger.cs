@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace SqlChic.PerfTests
 {
@@ -7,64 +9,137 @@ namespace SqlChic.PerfTests
 		: IDisposable
 	{
 		private readonly int _iterations;
-		private TextWriter _Output = null;
+		private readonly TextWriter _RawCsvOutput;
+		private readonly TextWriter _ConcurrencyCsvOutput;
+		private readonly List<Tuple<string, int, int, TimeSpan>> _Entries = new List<Tuple<string, int, int, TimeSpan>>();
 
-		public TestSuiteLogger(string outputFilePath, int iterations)
+		public TestSuiteLogger(string rawCsvFilePath, string concurrencyCsvFilePath, int iterations)
 		{
 			_iterations = iterations;
-			if (!String.IsNullOrWhiteSpace(outputFilePath))
+			if (!String.IsNullOrWhiteSpace(rawCsvFilePath))
 			{
-				if(System.IO.File.Exists(outputFilePath))
-					System.IO.File.Delete(outputFilePath);
-				_Output = new StreamWriter(outputFilePath);
-				_Output.WriteLine("Test,Iterations,Concurrency,\"Total Time (ms)\"");
+				if(System.IO.File.Exists(rawCsvFilePath))
+					System.IO.File.Delete(rawCsvFilePath);
+				_RawCsvOutput = new StreamWriter(rawCsvFilePath);
+				_RawCsvOutput.WriteLine("Test,Iterations,Concurrency,\"Total Time (ms)\"");
 			}
 			else
 			{
-				_Output = TextWriter.Null;
+				_RawCsvOutput = TextWriter.Null;
+			}
+			if (!String.IsNullOrWhiteSpace(concurrencyCsvFilePath))
+			{
+				if(System.IO.File.Exists(concurrencyCsvFilePath))
+					System.IO.File.Delete(concurrencyCsvFilePath);
+				_ConcurrencyCsvOutput = new StreamWriter(concurrencyCsvFilePath);
+			}
+			else
+			{
+				_ConcurrencyCsvOutput = TextWriter.Null;
 			}
 		}
 
 		public TestRunLogger BeginLoggingRun(int concurrency)
 		{
-			return new TestRunLogger(_Output, _iterations, concurrency);
+			return new TestRunLogger(LogTestResult, _iterations, concurrency);
 		}
 
 		public void Dispose()
 		{
-			if (_Output != TextWriter.Null)
+			if (_RawCsvOutput != TextWriter.Null)
 			{
-				_Output.Flush();
-				_Output.Dispose();
+				FinishRawCsvOutput();
 			}
+			if (_ConcurrencyCsvOutput != TextWriter.Null)
+			{
+				FinishConcurrencyCsvOutput();
+			}
+		}
+
+		private void FinishConcurrencyCsvOutput()
+		{
+			try
+			{
+				if (_Entries.Count > 0)
+				{
+					var byTest = _Entries.ToLookup(x => x.Item1, x => Tuple.Create(x.Item2, x.Item3, x.Item4));
+					var testNames =
+						byTest.Select(x => Tuple.Create(x.Key, x.Select(y => y.Item3.TotalMilliseconds).GeoAverage()))
+							  .OrderBy(x => x.Item2)
+							  .Select(x => x.Item1)
+							  .ToList();
+					_ConcurrencyCsvOutput.Write("Concurrencies");
+					testNames.ForEach(x => _ConcurrencyCsvOutput.Write(",\"{0}\"", x));
+					_ConcurrencyCsvOutput.WriteLine();
+					var concurrencies = _Entries.Select(x => x.Item3).Distinct().OrderBy(x => x).ToArray();
+					foreach (var concurrency in concurrencies)
+					{
+						_ConcurrencyCsvOutput.Write(concurrency);
+						foreach (var test in testNames)
+						{
+							var dp = byTest[test].SingleOrDefault(x => x.Item2 == concurrency);
+							if (dp == null)
+							{
+								_ConcurrencyCsvOutput.Write(",");
+							}
+							else
+							{
+								_ConcurrencyCsvOutput.Write(",{0}", dp.Item3.TotalMilliseconds);
+							}
+						}
+						_ConcurrencyCsvOutput.WriteLine();
+						_ConcurrencyCsvOutput.Flush();
+					}					
+				}
+			}
+			finally
+			{
+				_ConcurrencyCsvOutput.Dispose();
+			}
+		}
+
+		private void FinishRawCsvOutput()
+		{
+			_RawCsvOutput.Flush();
+			_RawCsvOutput.Dispose();
+		}
+
+		private void LogTestResult(string testName, int iterations, int concurrency, TimeSpan totalTestTime)
+		{
+			Program.LogTestToConsole(testName, totalTestTime);
+			if (_RawCsvOutput != TextWriter.Null)
+			{
+				_RawCsvOutput.WriteLine("\"{0}\",{1},{2},{3}", testName, iterations, concurrency, totalTestTime.TotalMilliseconds);
+			}
+			_Entries.Add(Tuple.Create(testName,iterations,concurrency,totalTestTime));
 		}
 
 		public class TestRunLogger
 			: IDisposable
 		{
 			private readonly TextWriter _csvOutput;
+			private readonly Action<string, int, int, TimeSpan> _logTestResult;
 			private readonly int _iterations;
 			private readonly int _concurrency;
 
-			public TestRunLogger(TextWriter csvOutput, int iterations, int concurrency)
+			public TestRunLogger(Action<string,int,int,TimeSpan> logTestResult, int iterations, int concurrency)
 			{
-				_csvOutput = csvOutput;
+				_logTestResult = logTestResult;
 				_iterations = iterations;
 				_concurrency = concurrency;
 			}
 
 			public void LogTestResult(string testName, TimeSpan totalTestTime)
 			{
-				Program.LogTestToConsole(testName, totalTestTime);
-				if (_csvOutput != TextWriter.Null)
+				if (_logTestResult != null)
 				{
-					_csvOutput.WriteLine("\"{0}\",{1},{2},{3}", testName, _iterations, _concurrency, totalTestTime.TotalMilliseconds);
+					_logTestResult(testName, _iterations, _concurrency, totalTestTime);
 				}
 			}
 
 			void IDisposable.Dispose()
 			{
-				_csvOutput.Flush();
+				// noop
 			}
 		}
 	}
