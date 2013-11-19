@@ -54,47 +54,60 @@ namespace SqlChic.PerfTests
 			}
 			Console.WriteLine();
 
-
-			using (StartLogSection(String.Format("PerfTests @ {0} iterations, no concurrency", iterations), teamCityDetected))
-            {
-				PerformanceTests.Run(iterations, 1, LogTestToConsole);
-				RunGcCollect();
-            }
-
-
-            if (baseConcurrency > 1)
-            {
-				using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 1xCPU ({1})", iterations, baseConcurrency), teamCityDetected))
+			using (var testSuiteLogger = new TestSuiteLogger("perftests.csv", iterations))
+			{
+				using (StartLogSection(String.Format("PerfTests @ {0} iterations, no concurrency", iterations), teamCityDetected))
 				{
-					PerformanceTests.Run(iterations, baseConcurrency, LogTestToConsole);
-					RunGcCollect();
+					using (var testResultLogger = testSuiteLogger.BeginLoggingRun(1))
+					{
+						PerformanceTests.Run(iterations, 1, testResultLogger.LogTestResult);
+						RunGcCollect();
+					}
 				}
 
-				using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 2xCPU ({1})", iterations, 2*baseConcurrency), teamCityDetected))
+				if (baseConcurrency > 1)
 				{
-					PerformanceTests.Run(iterations, 2*baseConcurrency, LogTestToConsole);
-					RunGcCollect();
-				}
+					using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 1xCPU ({1})", iterations, baseConcurrency), teamCityDetected))
+					{
+						using (var testResultLogger = testSuiteLogger.BeginLoggingRun(baseConcurrency))
+						{
+							PerformanceTests.Run(iterations, baseConcurrency, testResultLogger.LogTestResult);
+							RunGcCollect();
+						}
+					}
 
-				using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 4xCPU ({1})", iterations, 4*baseConcurrency), teamCityDetected))
+					using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 2xCPU ({1})", iterations, 2 * baseConcurrency), teamCityDetected))
+					{
+						using (var testResultLogger = testSuiteLogger.BeginLoggingRun(2 * baseConcurrency))
+						{
+							PerformanceTests.Run(iterations, 2 * baseConcurrency, testResultLogger.LogTestResult);
+							RunGcCollect();
+						}
+					}
+
+					using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ 4xCPU ({1})", iterations, 4 * baseConcurrency), teamCityDetected))
+					{
+						using (var testResultLogger = testSuiteLogger.BeginLoggingRun(4 * baseConcurrency))
+						{
+							PerformanceTests.Run(iterations, 4 * baseConcurrency, testResultLogger.LogTestResult);
+						}
+					}
+
+					//int baseConcurrencySquared = (int) Math.Pow(baseConcurrency, 2);
+					//if (baseConcurrencySquared > (baseConcurrency * 4))
+					//{
+					//	using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ CPU^2 ({1})", iterations, baseConcurrencySquared), teamCityDetected))
+					//	{
+					//		RunGcCollect();
+					//		PerformanceTests.Run(iterations, baseConcurrencySquared, LogTestToConsole);
+					//	}
+					//}
+				}
+				else
 				{
-					PerformanceTests.Run(iterations, 4*baseConcurrency, LogTestToConsole);
+					Console.Error.WriteLine("Unable to test concurrency due to lack of CPUs");
 				}
-
-				//int baseConcurrencySquared = (int) Math.Pow(baseConcurrency, 2);
-				//if (baseConcurrencySquared > (baseConcurrency * 4))
-				//{
-				//	using (StartLogSection(String.Format("PerfTests @ {0} iterations, concurrency @ CPU^2 ({1})", iterations, baseConcurrencySquared), teamCityDetected))
-				//	{
-				//		RunGcCollect();
-				//		PerformanceTests.Run(iterations, baseConcurrencySquared, LogTestToConsole);
-				//	}
-				//}
-            }
-            else
-            {
-                Console.Error.WriteLine("Unable to test concurrency due to lack of CPUs");
-            }
+			}
         }
 
         private static void RunGcCollect()
@@ -105,9 +118,9 @@ namespace SqlChic.PerfTests
             Console.WriteLine();
         }
 
-        private static void LogTestToConsole(string testName, TimeSpan totalTestTime)
+        public static void LogTestToConsole(string testName, TimeSpan totalTestTime)
         {
-            Console.WriteLine("{0} \t{1}ms", testName, totalTestTime.TotalMilliseconds);
+            Console.WriteLine("{0} \t\t{1}ms", testName, totalTestTime.TotalMilliseconds);
         }
 
         private static void EnsureDBSetup()
@@ -178,28 +191,4 @@ end
 			}
 		}
     }
-
-	internal class OnDispose
-		: IDisposable
-	{
-		private readonly Action _action;
-
-		private OnDispose(Action action)
-		{
-			if (action == null) throw new ArgumentNullException("action");
-			_action = action;
-		}
-
-		internal static IDisposable Do(Action action)
-		{
-			return new OnDispose(action);
-		}
-
-		internal static readonly IDisposable DoNothing = Do(() => { });
-
-		public void Dispose()
-		{
-			_action();
-		}
-	}
 }
