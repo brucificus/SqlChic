@@ -1,12 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Data.Linq;
 using System.Data.SqlClient;
-using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Linq;
-using System.Threading.Tasks;
 using BLToolkit.Data;
 using NHibernate.Criterion;
 using NHibernate.Linq;
@@ -17,163 +14,20 @@ using SqlChic.PerfTests.NHibernate;
 
 namespace SqlChic.PerfTests
 {
-    class PerformanceTests
+    internal static class PerformanceTests
     {
-        class Test
-        {
-            public static Test Create(Action<int> iteration, string name)
-            {
-                return Create(iteration, () => { }, name);
-            }
-
-            public static Test Create(Func<int, Task> iteration, string name)
-            {
-	            return Create(iteration, () => { }, name);
-            }
-
-			public static Test Create(Action<int> iteration, Action teardown, string name)
-			{
-				return Create((i) =>
-					{
-						var t = Task.Factory.StartNew(() => iteration(i));
-						return t;
-					}, teardown, name);
-			}
-
-			public static Test Create(Func<int, Task> iteration, Action teardown, string name)
-			{
-				return new Test { Iteration = iteration, Name = name, Teardown = teardown };
-			}
-
-            public Func<int,Task> Iteration { get; private set; }
-            public string Name { get; private set; }
-            public Stopwatch Watch { get; set; }
-			public Action Teardown { get; private set; }
-        }
-
-        class Tests : List<Test>
-        {
-            private readonly Action<string, TimeSpan> _logger;
-
-            public Tests(Action<string,TimeSpan> logger)
-            {
-                _logger = logger;
-            }
-
-            public void Add(Action<int> iteration, string name)
-            {
-                Add(Test.Create(iteration, name));
-            }
-
-			public void Add(Func<int, Task> iteration, string name)
-			{
-				Add(Test.Create(iteration, name));
-			}
-
-			public void Add(Action<int> iteration, Action teardown, string name)
-			{
-				Add(Test.Create(iteration, teardown, name));
-			}
-
-			public void Add(Func<int, Task> iteration, Action teardown, string name)
-			{
-				Add(Test.Create(iteration, teardown, name));
-			}
-
-            public void Run(int iterations, int concurrency)
-            { 
-                // warmup 
-                foreach (var test in this)
-                {
-                    var task = test.Iteration(iterations + 1);
-	                task.Wait();
-                    test.Watch = new Stopwatch();
-                    test.Watch.Reset();
-                }
-
-				//System.Threading.ThreadPool.SetMaxThreads(concurrency*2, concurrency*2);
-				//System.Threading.ThreadPool.SetMinThreads(concurrency, concurrency);
-				//System.Threading.ThreadPool.SetMaxThreads(concurrency * 2, concurrency * 2);
-
-                if (concurrency == 1)
-                {
-                    var rand = new Random();
-                    foreach (var test in this.OrderBy(ignore => rand.Next()))
-                    {
-                        test.Watch.Start();
-						for (int i = 1; i <= iterations; i++)
-						{
-							var task = test.Iteration(i);
-							task.Wait();
-                        }
-                        test.Watch.Stop();
-	                    test.Teardown();
-                    }    
-                }
-				else if (concurrency > iterations)
-				{
-					throw new InvalidOperationException(String.Format("Concurrency ({0}) exceeds iterations ({1})", concurrency, iterations));
-				}
-				else
-				{
-					foreach (var test in this)
-					{
-						Func<int, Task> createTask = async (concurrencyIndex) =>
-							{
-								for (int i = concurrencyIndex; i < iterations; i += concurrency)
-								{
-									var work = test.Iteration(i);
-									await work;
-								}
-							};
-
-						test.Watch.Start();
-						var tasks = new List<Task>();
-						foreach (var i in Enumerable.Range(1, concurrency))
-						{
-							tasks.Add(createTask(i));
-						}
-						var tasksToWaitOn = tasks.ToArray();
-						Task.WaitAll(tasksToWaitOn);
-						test.Watch.Stop();
-						test.Teardown();
-					}
-				}
-
-                foreach (var test in this.OrderBy(t => t.Watch.ElapsedMilliseconds))
-                {
-                    _logger(test.Name, test.Watch.Elapsed);
-                }
-            }
-        }
-
-	    private static Func<EntityFramework.tempdbEntities1, int, EntityFramework.Post> entityFrameworkCompiled = System.Data.Objects.CompiledQuery.Compile<EntityFramework.tempdbEntities1, int, EntityFramework.Post>((db, id) => db.Posts.First(p => p.Id == id));
-
-		internal class SomaConfig : Soma.Core.MsSqlConfig
+		public static void Run(int iterations, int concurrency, Action<string, TimeSpan> resultLogger)
 		{
-			public override string ConnectionString
-			{
-				get { return Program.connectionString; }
-			}
+			if (iterations < 1)
+				return;
+			if (concurrency < 1)
+				throw new ArgumentOutOfRangeException("concurrency");
+			if (resultLogger == null)
+				throw new ArgumentNullException("resultLogger");
 
-			public override void Log(Soma.Core.PreparedStatement preparedStatement)
-			{
-				// no op
-			}
-		}
+			var tests = new Tests(resultLogger);
 
-        public void Run(int iterations, int concurrency, Action<string,TimeSpan> logger)
-        {
-            if (iterations < 1)
-                return;
-            if(concurrency < 1)
-                throw new ArgumentOutOfRangeException("concurrency");
-            if(logger == null)
-                throw new ArgumentNullException("logger");
-
-            var tests = new Tests(logger);
-
-            AddTests_Linq2Sql(tests, concurrency, iterations);
+			AddTests_Linq2Sql(tests, concurrency, iterations);
 
 			AddTests_EntityFramework(tests, concurrency);
 
@@ -185,27 +39,29 @@ namespace SqlChic.PerfTests
 
 			AddTests_Subsonic(tests, concurrency);
 
-	        // NHibernate
+			// NHibernate
 
 			AddTests_NHibernate(tests, concurrency);
 
-	        // bltoolkit
+			// bltoolkit
 			AddTest_BlToolkit(tests, concurrency);
 
-	        // Simple.Data
+			// Simple.Data
 			AddTest_SimpleData(tests, concurrency);
 
-	        // Soma
+			// Soma
 			var somadb = new Soma.Core.Db(new SomaConfig());
 			tests.Add(id => { somadb.Find<Post>(id); }, "Soma");
 
-            //ServiceStack's OrmLite:
+			//ServiceStack's OrmLite:
 			AddTest_OrmLite(tests, concurrency);
 
 			AddTests_HandCoded(tests, concurrency);
 
-	        tests.Run(iterations, concurrency);
-        }
+			tests.Run(iterations, concurrency);
+		}
+		
+		private static Func<EntityFramework.tempdbEntities1, int, EntityFramework.Post> entityFrameworkCompiled = System.Data.Objects.CompiledQuery.Compile<EntityFramework.tempdbEntities1, int, EntityFramework.Post>((db, id) => db.Posts.First(p => p.Id == id));    
 		
 	    private static void AddTest_OrmLite(Tests tests, int concurrency)
 	    {
@@ -602,48 +458,5 @@ namespace SqlChic.PerfTests
 				()=>l2scontexts3.Cast<IDisposable>().Union(connections3).ToList().ForEach(x=>x.Dispose()),
 					  "Linq2Sql (ExecuteQuery)");
 	    }
-    }
-
-    static class SqlDataReaderHelper
-    {
-        public static string GetNullableString(this SqlDataReader reader, int index) 
-        {
-            object tmp = reader.GetValue(index);
-            if (tmp != DBNull.Value)
-            {
-                return (string)tmp;
-            }
-            return null;
-        }
-
-        public static Nullable<T> GetNullableValue<T>(this SqlDataReader reader, int index) where T : struct
-        {
-            object tmp = reader.GetValue(index);
-            if (tmp != DBNull.Value)
-            {
-                return (T)tmp;
-            }
-            return null;
-        }
-
-		public static async Task<string> GetNullableStringAsync(this SqlDataReader reader, int index)
-		{
-			object tmp = await reader.GetFieldValueAsync<object>(index);
-			if (tmp != DBNull.Value)
-			{
-				return (string)tmp;
-			}
-			return null;
-		}
-
-		public static async Task<Nullable<T>> GetNullableValueAsync<T>(this SqlDataReader reader, int index) where T : struct
-		{
-			object tmp = await reader.GetFieldValueAsync<object>(index);
-			if (tmp != DBNull.Value)
-			{
-				return (T)tmp;
-			}
-			return null;
-		}
     }
 }
