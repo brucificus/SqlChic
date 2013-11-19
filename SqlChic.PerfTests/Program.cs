@@ -6,31 +6,26 @@ using System.Threading.Tasks;
 
 namespace SqlChic.PerfTests
 {
-    [ServiceStack.DataAnnotations.Alias("Posts")]
-	[Soma.Core.Table(Name = "Posts")]
-    class Post
+	class Program
     {
-		[Soma.Core.Id(Soma.Core.IdKind.Identity)]
-        public int Id { get; set; }
-        public string Text { get; set; }
-        public DateTime CreationDate { get; set; }
-        public DateTime LastChangeDate { get; set; }
-        public int? Counter1 { get; set; }
-        public int? Counter2 { get; set; }
-        public int? Counter3 { get; set; }
-        public int? Counter4 { get; set; }
-        public int? Counter5 { get; set; }
-        public int? Counter6 { get; set; }
-        public int? Counter7 { get; set; }
-        public int? Counter8 { get; set; }
-        public int? Counter9 { get; set; }
-
-    }
-
-    class Program
-    {
-
 		public static readonly string connectionString = "Data Source=.;Initial Catalog=tempdb;Integrated Security=True;MultipleActiveResultSets=True";
+
+        static void Main()
+        {
+
+#if DEBUG
+            throw new InvalidOperationException("Performance tests should not be run in DEBUG.");
+#else
+			EnsureDBSetup();
+			RunPerformanceTests();
+#endif
+
+            if (System.Diagnostics.Debugger.IsAttached)
+            {
+                Console.WriteLine("(end of tests; press any key)");
+                Console.ReadKey();
+            }
+        }
 
         public static SqlConnection GetOpenConnection()
         {
@@ -109,23 +104,6 @@ namespace SqlChic.PerfTests
             Console.WriteLine("{0} \t{1}ms", testName, totalTestTime.TotalMilliseconds);
         }
 
-        static void Main()
-        {
-
-#if DEBUG
-            throw new InvalidOperationException("Performance tests should not be run in DEBUG.");
-#else
-			EnsureDBSetup();
-			RunPerformanceTests();
-#endif
-
-            if (System.Diagnostics.Debugger.IsAttached)
-            {
-                Console.WriteLine("(end of tests; press any key)");
-                Console.ReadKey();
-            }
-        }
-
         private static void EnsureDBSetup()
         {
             using (var cnn = GetOpenConnection())
@@ -174,6 +152,5 @@ end
                 cmd.ExecuteNonQuery();
             }
         }
-
     }
 }
