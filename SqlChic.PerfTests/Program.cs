@@ -48,7 +48,7 @@ namespace SqlChic.PerfTests
 
 			using (StartLogSection(String.Format("PerfTests warming up", warmupIterations), teamCityDetected))
 			{
-				PerformanceTests.Run(warmupIterations, 1, (tn, tt) => { });
+				PerformanceTests.Run(warmupIterations, 1, (tn, tta, tte) => { });
 
 				RunGcCollect();				
 			}
@@ -118,9 +118,9 @@ namespace SqlChic.PerfTests
             Console.WriteLine();
         }
 
-        public static void LogTestToConsole(string testName, TimeSpan totalTestTime)
+        public static void LogTestToConsole(string testName, TimeSpan testTimeAverage, double testTimeAverageError)
         {
-            Console.WriteLine("{0} \t\t{1}ms", testName, totalTestTime.TotalMilliseconds);
+			Console.WriteLine("{0,-45} {1,6:0.00}ms (err {2,4:00.0}%)", testName, testTimeAverage.TotalMilliseconds, testTimeAverageError*100.0);
         }
 
         private static void EnsureDBSetup()
