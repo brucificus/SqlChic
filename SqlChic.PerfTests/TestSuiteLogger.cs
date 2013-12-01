@@ -11,7 +11,7 @@ namespace SqlChic.PerfTests
 		private readonly int _iterations;
 		private readonly TextWriter _RawCsvOutput;
 		private readonly TextWriter _ConcurrencyCsvOutput;
-		private readonly List<Tuple<string, int, int, TimeSpan>> _Entries = new List<Tuple<string, int, int, TimeSpan>>();
+		private readonly List<Tuple<string, int, int, TimeSpan, double>> _Entries = new List<Tuple<string, int, int, TimeSpan, double>>();
 
 		public TestSuiteLogger(string rawCsvFilePath, string concurrencyCsvFilePath, int iterations)
 		{
@@ -21,7 +21,7 @@ namespace SqlChic.PerfTests
 				if(System.IO.File.Exists(rawCsvFilePath))
 					System.IO.File.Delete(rawCsvFilePath);
 				_RawCsvOutput = new StreamWriter(rawCsvFilePath);
-				_RawCsvOutput.WriteLine("Test,Iterations,Concurrency,\"Total Time (ms)\"");
+				_RawCsvOutput.WriteLine("Test,Iterations,Concurrency,\"Average Time (ms)\",Error");
 			}
 			else
 			{
@@ -104,36 +104,36 @@ namespace SqlChic.PerfTests
 			_RawCsvOutput.Dispose();
 		}
 
-		private void LogTestResult(string testName, int iterations, int concurrency, TimeSpan totalTestTime)
+		private void LogTestResult(string testName, int iterations, int concurrency, TimeSpan testTimeAverage, double testTimeAverageError)
 		{
-			Program.LogTestToConsole(testName, totalTestTime);
+			Program.LogTestToConsole(testName, testTimeAverage, testTimeAverageError);
 			if (_RawCsvOutput != TextWriter.Null)
 			{
-				_RawCsvOutput.WriteLine("\"{0}\",{1},{2},{3}", testName, iterations, concurrency, totalTestTime.TotalMilliseconds);
+				_RawCsvOutput.WriteLine("\"{0}\",{1},{2},{3},{4}", testName, iterations, concurrency, testTimeAverage.TotalMilliseconds, testTimeAverageError);
 			}
-			_Entries.Add(Tuple.Create(testName,iterations,concurrency,totalTestTime));
+			_Entries.Add(Tuple.Create(testName, iterations, concurrency, testTimeAverage, testTimeAverageError));
 		}
 
 		public class TestRunLogger
 			: IDisposable
 		{
 			private readonly TextWriter _csvOutput;
-			private readonly Action<string, int, int, TimeSpan> _logTestResult;
+			private readonly Action<string, int, int, TimeSpan, double> _logTestResult;
 			private readonly int _iterations;
 			private readonly int _concurrency;
 
-			public TestRunLogger(Action<string,int,int,TimeSpan> logTestResult, int iterations, int concurrency)
+			public TestRunLogger(Action<string,int,int,TimeSpan, double> logTestResult, int iterations, int concurrency)
 			{
 				_logTestResult = logTestResult;
 				_iterations = iterations;
 				_concurrency = concurrency;
 			}
 
-			public void LogTestResult(string testName, TimeSpan totalTestTime)
+			public void LogTestResult(string testName, TimeSpan testTimeAverage, double testTimeAverageError)
 			{
 				if (_logTestResult != null)
 				{
-					_logTestResult(testName, _iterations, _concurrency, totalTestTime);
+					_logTestResult(testName, _iterations, _concurrency, testTimeAverage, testTimeAverageError);
 				}
 			}
 

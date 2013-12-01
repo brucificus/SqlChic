@@ -8,9 +8,9 @@ namespace SqlChic.PerfTests
 {
 	internal class Tests : List<Test>
 	{
-		private readonly Action<string, TimeSpan> _resultLogger;
+		private readonly Action<string, TimeSpan, double> _resultLogger;
 
-		public Tests(Action<string,TimeSpan> resultLogger)
+		public Tests(Action<string,TimeSpan,double> resultLogger)
 		{
 			_resultLogger = resultLogger;
 		}
@@ -42,8 +42,6 @@ namespace SqlChic.PerfTests
 			{
 				var task = test.Iteration(iterations + 1);
 				task.Wait();
-				test.Watch = new Stopwatch();
-				test.Watch.Reset();
 			}
 
 			//System.Threading.ThreadPool.SetMaxThreads(concurrency*2, concurrency*2);
@@ -55,13 +53,16 @@ namespace SqlChic.PerfTests
 				var rand = new Random();
 				foreach (var test in this.OrderBy(ignore => rand.Next()))
 				{
-					test.Watch.Start();
+					var watch = new Stopwatch();
 					for (int i = 1; i <= iterations; i++)
 					{
+						watch.Reset();
+						watch.Start();
 						var task = test.Iteration(i);
 						task.Wait();
+						watch.Stop();
+						test.Timings.Add(watch.Elapsed);
 					}
-					test.Watch.Stop();
 					test.Teardown();
 				}    
 			}
@@ -71,33 +72,45 @@ namespace SqlChic.PerfTests
 			}
 			else
 			{
+				Func<Test, int, Task> createTask = async (test, concurrencyIndex) =>
+				{
+					var watch = new Stopwatch();
+					for (var i = concurrencyIndex; i < iterations; i += concurrency)
+					{
+						watch.Reset();
+						watch.Start();
+						var work = test.Iteration(i);
+						await work;
+						watch.Stop();
+						test.Timings.Add(watch.Elapsed);
+					}
+				};
 				foreach (var test in this)
 				{
-					Func<int, Task> createTask = async (concurrencyIndex) =>
-						{
-							for (int i = concurrencyIndex; i < iterations; i += concurrency)
-							{
-								var work = test.Iteration(i);
-								await work;
-							}
-						};
-
-					test.Watch.Start();
-					var tasks = new List<Task>();
-					foreach (var i in Enumerable.Range(1, concurrency))
-					{
-						tasks.Add(createTask(i));
-					}
-					var tasksToWaitOn = tasks.ToArray();
+					var tasksToWaitOn = Enumerable.Range(1, concurrency).Select(i => createTask(test, i)).ToArray();
 					Task.WaitAll(tasksToWaitOn);
-					test.Watch.Stop();
 					test.Teardown();
 				}
 			}
 
-			foreach (var test in this.OrderBy(t => t.Watch.ElapsedMilliseconds))
+			// Remove outliers so that we get the best representation
+			var testTimingsPruned = this.ToDictionary(x => x, x =>
+				{
+					var timingsAverage = x.Timings.Average();
+					var timingsStdDev = x.Timings.StdDevFrom(timingsAverage);
+					return Tuple.Create(x.Timings.Where(y => (timingsAverage - y).Abs() <= timingsStdDev), x.Timings);
+				});
+			var testTimingsPrunedResults = testTimingsPruned.ToDictionary(x => x.Key, x =>
+				{
+					var prunedMeasurementsCount = x.Value.Item1.Count();
+					var originalMeasurementsCount = x.Value.Item2.Count();
+					var error = (double) (originalMeasurementsCount - prunedMeasurementsCount)/(double)originalMeasurementsCount;
+					return Tuple.Create(x.Value.Item1.Average(), error); 
+				});
+
+			foreach (var kvp in testTimingsPrunedResults.OrderBy(x=>x.Value.Item1))
 			{
-				_resultLogger(test.Name, test.Watch.Elapsed);
+				_resultLogger(kvp.Key.Name, kvp.Value.Item1, kvp.Value.Item2);
 			}
 		}
 	}

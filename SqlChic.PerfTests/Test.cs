@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
@@ -30,9 +32,14 @@ namespace SqlChic.PerfTests
 			return new Test { Iteration = iteration, Name = name, Teardown = teardown };
 		}
 
+		private Test()
+		{
+			Timings = new ConcurrentBag<TimeSpan>();
+		}
+
 		public Func<int,Task> Iteration { get; private set; }
 		public string Name { get; private set; }
-		public Stopwatch Watch { get; set; }
+		public System.Collections.Concurrent.ConcurrentBag<TimeSpan> Timings { get; private set; }
 		public Action Teardown { get; private set; }
 	}
 }
