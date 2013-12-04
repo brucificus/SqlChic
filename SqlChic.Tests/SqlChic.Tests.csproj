@@ -95,6 +95,7 @@
     </Compile>
     <Compile Include="Tests.cs" />
     <Compile Include="Tests45.cs" />
+    <Compile Include="TransactionRollbackAttribute.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
