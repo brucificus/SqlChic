@@ -2784,26 +2784,27 @@ string name, object value = null, DbType? dbType = null, ParameterDirection? dir
             }
         }
 
-
-        /// <summary>
-        /// Get the value of a parameter
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="name"></param>
-        /// <returns>The value, note DBNull.Value is not returned, instead the value is returned as null</returns>
-        public T Get<T>(string name)
-        {
-            var val = parameters[Clean(name)].AttachedParam.Value;
-            if (val == DBNull.Value)
-            {
-                if (default(T) != null)
-                {
-                    throw new ApplicationException("Attempting to cast a DBNull to a non nullable type!");
-                }
-                return default(T);
-            }
-            return (T)val;
-        }
+		// TOFIX: Removed for now because the attached parameters that use Output/Return direction do not get populated
+		// deterministically. API refactor may be needed, so deferring for now.
+		///// <summary>
+		///// Get the value of a parameter
+		///// </summary>
+		///// <typeparam name="T"></typeparam>
+		///// <param name="name"></param>
+		///// <returns>The value, note DBNull.Value is not returned, instead the value is returned as null</returns>
+		//public T Get<T>(string name)
+		//{
+		//	var val = parameters[Clean(name)].AttachedParam.Value;
+		//	if (val == DBNull.Value)
+		//	{
+		//		if (default(T) != null)
+		//		{
+		//			throw new ApplicationException("Attempting to cast a DBNull to a non nullable type!");
+		//		}
+		//		return default(T);
+		//	}
+		//	return (T)val;
+		//}
     }
 
     /// <summary>

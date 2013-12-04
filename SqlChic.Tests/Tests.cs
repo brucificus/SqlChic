@@ -705,17 +705,18 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             }
         }
         
-        [Test]
-        public async Task TestExecuteCommandWithHybridParametersAsync()
-        {
-            using (var connection = GetOpenConnection())
-            {
-                var p = new DynamicParameters(new {a = 1, b = 2});
-                p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.Output);
-                await connection.ExecuteAsync(@"set @c = @a + @b", p);
-                p.Get<int>("@c").IsEqualTo(3);
-            }
-        }
+		// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
+		//[Test]
+		//public async Task TestExecuteCommandWithHybridParametersAsync()
+		//{
+		//	using (var connection = GetOpenConnection())
+		//	{
+		//		var p = new DynamicParameters(new {a = 1, b = 2});
+		//		p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.Output);
+		//		await connection.ExecuteAsync(@"set @c = @a + @b", p);
+		//		p.Get<int>("@c").IsEqualTo(3);
+		//	}
+		//}
 
         [Test]
 		[TransactionRollback]
@@ -1380,20 +1381,21 @@ Order by p.Id";
             }
         }
 
-        [Test]
-        public async Task TestSupportForDynamicParametersAsync()
-        {
-            using (var connection = GetOpenConnection())
-            {
-                var p = new DynamicParameters();
-                p.Add("name", "bob");
-                p.Add("age", dbType: DbType.Int32, direction: ParameterDirection.Output);
+		// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
+		//[Test]
+		//public async Task TestSupportForDynamicParametersAsync()
+		//{
+		//	using (var connection = GetOpenConnection())
+		//	{
+		//		var p = new DynamicParameters();
+		//		p.Add("name", "bob");
+		//		p.Add("age", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-                (await connection.Query<string>("set @age = 11 select @name", p).FirstAsync()).IsEqualTo("bob");
+		//		(await connection.Query<string>("set @age = 11 select @name", p).FirstAsync()).IsEqualTo("bob");
 
-                p.Get<int>("age").IsEqualTo(11);
-            }
-        }
+		//		p.Get<int>("age").IsEqualTo(11);
+		//	}
+		//}
 
         [Test]
         public async Task TestSupportForExpandoObjectParametersAsync()
@@ -1408,33 +1410,34 @@ Order by p.Id";
             }
         }
 
-        [Test]
-		[TransactionRollback]
-		public async Task TestProcSupportAsync()
-        {
-            using (var connection = GetOpenConnection())
-            {
-                var p = new DynamicParameters();
-                p.Add("a", 11);
-                p.Add("b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-                p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
+// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
+//		[Test]
+//		[TransactionRollback]
+//		public async Task TestProcSupportAsync()
+//		{
+//			using (var connection = GetOpenConnection())
+//			{
+//				var p = new DynamicParameters();
+//				p.Add("a", 11);
+//				p.Add("b", dbType: DbType.Int32, direction: ParameterDirection.Output);
+//				p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
 
-                await connection.ExecuteAsync(@"create proc #TestProc 
-	@a int,
-	@b int output
-as 
-begin
-	set @b = 999
-	select 1111
-	return @a
-end");
-                (await connection.Query<int>("#TestProc", p, commandType: CommandType.StoredProcedure).FirstAsync())
-                    .IsEqualTo(1111);
+//				await connection.ExecuteAsync(@"create proc #TestProc 
+//	@a int,
+//	@b int output
+//as 
+//begin
+//	set @b = 999
+//	select 1111
+//	return @a
+//end");
+//				(await connection.Query<int>("#TestProc", p, commandType: CommandType.StoredProcedure).FirstAsync())
+//					.IsEqualTo(1111);
 
-                p.Get<int>("c").IsEqualTo(11);
-                p.Get<int>("b").IsEqualTo(999);
-            }
-        }
+//				p.Get<int>("c").IsEqualTo(11);
+//				p.Get<int>("b").IsEqualTo(999);
+//			}
+//		}
 
         [Test]
         public async Task TestDbStringAsync()
@@ -2021,19 +2024,20 @@ Order by p.Id";
             }
         }
 
-        [Test]
-        public async Task TestDynamicParamNullSupportAsync()
-        {
-            using (var connection = GetOpenConnection())
-            {
-                var p = new DynamicParameters();
+		// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
+		//[Test]
+		//public async Task TestDynamicParamNullSupportAsync()
+		//{
+		//	using (var connection = GetOpenConnection())
+		//	{
+		//		var p = new DynamicParameters();
 
-                p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-                await connection.ExecuteAsync("select @b = null", p);
+		//		p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
+		//		await connection.ExecuteAsync("select @b = null", p);
 
-                p.Get<int?>("@b").IsNull();
-            }
-        }
+		//		p.Get<int?>("@b").IsNull();
+		//	}
+		//}
         class Foo1
         {
 #pragma warning disable 0649
@@ -2267,60 +2271,62 @@ Order by p.Id";
             }
         }
 
-        [Test]
-		[TransactionRollback]
-		public async Task TestProcWithOutParameterAsync()
-        {
-            using (var connection = GetOpenConnection())
-            {
-                await connection.ExecuteAsync(
-                    @"CREATE PROCEDURE #TestProcWithOutParameter
-        @ID int output,
-        @Foo varchar(100),
-        @Bar int
-        AS
-        SET @ID = @Bar + LEN(@Foo)");
-                var obj = new
-                    {
-                        ID = 0,
-                        Foo = "abc",
-                        Bar = 4
-                    };
-                var args = new DynamicParameters(obj);
-                args.Add("ID", 0, direction: ParameterDirection.Output);
-                await connection.ExecuteAsync("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
-                args.Get<int>("ID").IsEqualTo(7);
-            }
-        }
+// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
+//		[Test]
+//		[TransactionRollback]
+//		public async Task TestProcWithOutParameterAsync()
+//		{
+//			using (var connection = GetOpenConnection())
+//			{
+//				await connection.ExecuteAsync(
+//					@"CREATE PROCEDURE #TestProcWithOutParameter
+//        @ID int output,
+//        @Foo varchar(100),
+//        @Bar int
+//        AS
+//        SET @ID = @Bar + LEN(@Foo)");
+//				var obj = new
+//					{
+//						ID = 0,
+//						Foo = "abc",
+//						Bar = 4
+//					};
+//				var args = new DynamicParameters(obj);
+//				args.Add("ID", 0, direction: ParameterDirection.Output);
+//				await connection.ExecuteAsync("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
+//				args.Get<int>("ID").IsEqualTo(7);
+//			}
+//		}
 
-        [Test]
-		[TransactionRollback]
-		public async Task TestProcWithOutAndReturnParameterAsync()
-        {
-            using (var connection = GetOpenConnection())
-            {
-                await connection.ExecuteAsync(
-                    @"CREATE PROCEDURE #TestProcWithOutAndReturnParameter
-        @ID int output,
-        @Foo varchar(100),
-        @Bar int
-        AS
-        SET @ID = @Bar + LEN(@Foo)
-        RETURN 42");
-                var obj = new
-                {
-                    ID = 0,
-                    Foo = "abc",
-                    Bar = 4
-                };
-                var args = new DynamicParameters(obj);
-                args.Add("ID", 0, direction: ParameterDirection.Output);
-                args.Add("result", 0, direction: ParameterDirection.ReturnValue);
-                await connection.ExecuteAsync("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
-                args.Get<int>("ID").IsEqualTo(7);
-                args.Get<int>("result").IsEqualTo(42);
-            }
-        }
+// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
+//		[Test]
+//		[TransactionRollback]
+//		public async Task TestProcWithOutAndReturnParameterAsync()
+//		{
+//			using (var connection = GetOpenConnection())
+//			{
+//				await connection.ExecuteAsync(
+//					@"CREATE PROCEDURE #TestProcWithOutAndReturnParameter
+//        @ID int output,
+//        @Foo varchar(100),
+//        @Bar int
+//        AS
+//        SET @ID = @Bar + LEN(@Foo)
+//        RETURN 42");
+//				var obj = new
+//				{
+//					ID = 0,
+//					Foo = "abc",
+//					Bar = 4
+//				};
+//				var args = new DynamicParameters(obj);
+//				args.Add("ID", 0, direction: ParameterDirection.Output);
+//				args.Add("result", 0, direction: ParameterDirection.ReturnValue);
+//				await connection.ExecuteAsync("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
+//				args.Get<int>("ID").IsEqualTo(7);
+//				args.Get<int>("result").IsEqualTo(42);
+//			}
+//		}
         struct CanHazInt
         {
             public int Value { get; set; }
