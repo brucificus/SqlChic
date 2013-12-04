@@ -83,6 +83,7 @@ namespace SqlChic.Tests
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestMultiMapWithConstructorAsync()
         {
             using (var connection = GetOpenConnection())
@@ -116,8 +117,6 @@ namespace SqlChic.Tests
                 p.Owner.Ident.IsEqualTo(99);
 
                 data[2].Owner.IsNull();
-
-                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -420,6 +419,7 @@ namespace SqlChic.Tests
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestSchemaChangedAsync()
         {
             using (var connection = GetOpenConnection())
@@ -432,11 +432,11 @@ namespace SqlChic.Tests
                 d = await connection.Query<Dog>("select * from #dog").SingleAsync();
                 d.Name.IsNull();
                 d.Age.IsEqualTo(1);
-                await connection.ExecuteAsync("drop table #dog");
             }
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestSchemaChangedMultiMapAsync()
         {
             using (var connection = GetOpenConnection())
@@ -456,8 +456,6 @@ namespace SqlChic.Tests
                 tuple.Item1.Age.IsEqualTo(1);
                 tuple.Item2.Name.IsNull();
                 tuple.Item2.Age.IsEqualTo(1);
-
-                await connection.ExecuteAsync("drop table #dog");
             }
         }
 
@@ -516,6 +514,7 @@ namespace SqlChic.Tests
 
         // see http://stackoverflow.com/questions/16726709/string-format-with-sql-wildcard-causing-dapper-query-to-break
         [Test]
+		[TransactionRollback]
         public async Task CheckComplexConcatAsync()
         {
             using (var connection = GetOpenConnection())
@@ -690,6 +689,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestExecuteCommandAsync()
         {
             using (var connection = GetOpenConnection())
@@ -718,6 +718,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestExecuteMultipleCommandAsync()
         {
             using (var connection = GetOpenConnection())
@@ -737,6 +738,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestExecuteMultipleCommandStrongTypeAsync()
         {
             using (var connection = GetOpenConnection())
@@ -754,6 +756,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestExecuteMultipleCommandObjectArrayAsync()
         {
             using (var connection = GetOpenConnection())
@@ -885,6 +888,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
         }
 
         [Test]
+		[TransactionRollback]
         public async Task TestBigIntMemberAsync()
         {
             using (var connection = GetOpenConnection())
@@ -917,7 +921,8 @@ select * from @bar", new {foo}).SingleAsync();
         }
 
         [Test]
-        public async Task TestMultiMapAsync()
+		[TransactionRollback]
+		public async Task TestMultiMapAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -948,13 +953,12 @@ Order by p.Id";
                 p.Owner.Id.IsEqualTo(99);
 
                 data[2].Owner.IsNull();
-
-                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
         [Test]
-        public async Task TestMultiMapGridReaderAsync()
+		[TransactionRollback]
+		public async Task TestMultiMapGridReaderAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -995,8 +999,6 @@ Order by p.Id
 
                     data[2].Owner.IsNull();
                 }
-
-                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -1062,7 +1064,8 @@ Order by p.Id
         }
 
         [Test]
-        public async Task TestMultiMapDynamicAsync()
+		[TransactionRollback]
+		public async Task TestMultiMapDynamicAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -1094,8 +1097,6 @@ Order by p.Id";
                 ((int)p.Owner.Id).IsEqualTo(99);
 
                 ((object)data[2].Owner).IsNull();
-
-                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -1313,7 +1314,8 @@ Order by p.Id";
         }
 
         [Test]
-        public async Task MultiRSSqlCEAsync()
+		[TransactionRollback]
+		public async Task MultiRSSqlCEAsync()
         {
             if (File.Exists("Test.sdf"))
                 File.Delete("Test.sdf");
@@ -1407,7 +1409,8 @@ Order by p.Id";
         }
 
         [Test]
-        public async Task TestProcSupportAsync()
+		[TransactionRollback]
+		public async Task TestProcSupportAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -1564,12 +1567,15 @@ end");
         class IntDynamicParam : SqlMapper.IDynamicParameters
         {
             IEnumerable<int> numbers;
-            public IntDynamicParam(IEnumerable<int> numbers)
+	        private readonly string _intListType;
+
+	        public IntDynamicParam(IEnumerable<int> numbers, string intListType)
             {
-                this.numbers = numbers;
+	            this.numbers = numbers;
+	            _intListType = intListType;
             }
 
-            public void AddParameters(DbCommand command, SqlMapper.Identity identity)
+	        public void AddParameters(DbCommand command, SqlMapper.Identity identity)
             {
                 var sqlCommand = (SqlCommand)command;
                 sqlCommand.CommandType = CommandType.StoredProcedure;
@@ -1590,7 +1596,7 @@ end");
                 // Add the table parameter.
                 var p = sqlCommand.Parameters.Add("ints", SqlDbType.Structured);
                 p.Direction = ParameterDirection.Input;
-                p.TypeName = "int_list_type";
+                p.TypeName = _intListType;
                 p.Value = number_list;
 
             }
@@ -1600,44 +1606,46 @@ end");
         [Test]
         public async Task TestTVPAsync()
         {
-            using (var connection = GetOpenConnection())
-            {
-                try
-                {
-                    await connection.ExecuteAsync("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                    await connection.ExecuteAsync("CREATE PROC get_ints @ints int_list_type READONLY AS select * from @ints");
+			using (var connection = GetOpenConnection())
+			{
+				try
+				{
+					await connection.ExecuteAsync("CREATE TYPE int_list_type1 AS TABLE (n int NOT NULL PRIMARY KEY)");
+					await connection.ExecuteAsync("CREATE PROC get_ints1 @ints int_list_type1 READONLY AS select * from @ints");
 
-                    var nums =
-                        await connection.Query<int>("get_ints", new IntDynamicParam(new int[] {1, 2, 3})).ToList();
-                    nums[0].IsEqualTo(1);
-                    nums[1].IsEqualTo(2);
-                    nums[2].IsEqualTo(3);
-                    nums.Count.IsEqualTo(3);
-
-                }
-                finally
-                {
-                    try
-                    {
-                        connection.ExecuteAsync("DROP PROC get_ints").Wait();
-                    }
-                    finally
-                    {
-                        connection.ExecuteAsync("DROP TYPE int_list_type").Wait();
-                    }
-                }
-            }
+					var nums =
+						await connection.Query<int>("get_ints1", new IntDynamicParam(new int[] { 1, 2, 3 }, "int_list_type1")).ToList();
+					nums[0].IsEqualTo(1);
+					nums[1].IsEqualTo(2);
+					nums[2].IsEqualTo(3);
+					nums.Count.IsEqualTo(3);
+				}
+				finally
+				{
+					try
+					{
+						connection.ExecuteAsync("DROP PROC get_ints1").Wait();
+					}
+					finally
+					{
+						connection.ExecuteAsync("DROP TYPE int_list_type1").Wait();
+					}
+				}
+			}
         }
 
         class DynamicParameterWithIntTVP : DynamicParameters, SqlMapper.IDynamicParameters
         {
             IEnumerable<int> numbers;
-            public DynamicParameterWithIntTVP(IEnumerable<int> numbers)
+	        private readonly string _intListType;
+
+	        public DynamicParameterWithIntTVP(IEnumerable<int> numbers, string intListType)
             {
-                this.numbers = numbers;
+	            this.numbers = numbers;
+	            _intListType = intListType;
             }
 
-            public new void AddParameters(DbCommand command, SqlMapper.Identity identity)
+	        public new void AddParameters(DbCommand command, SqlMapper.Identity identity)
             {
                 base.AddParameters(command, identity);
 
@@ -1660,59 +1668,61 @@ end");
                 // Add the table parameter.
                 var p = sqlCommand.Parameters.Add("ints", SqlDbType.Structured);
                 p.Direction = ParameterDirection.Input;
-                p.TypeName = "int_list_type";
+                p.TypeName = _intListType;
                 p.Value = number_list;
 
             }
         }
 
         [Test]
-        public async Task TestTVPWithAdditionalParamsAsync()
+		public async Task TestTVPWithAdditionalParamsAsync()
         {
-            using (var connection = GetOpenConnection())
-            {
-                try
-                {
-                    await connection.ExecuteAsync("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                    await connection.ExecuteAsync("CREATE PROC get_values @ints int_list_type READONLY, @stringParam varchar(20), @dateParam datetime AS select i.*, @stringParam as stringParam, @dateParam as dateParam from @ints i");
+			using (var connection = GetOpenConnection())
+			{
+				try
+				{
+					await connection.ExecuteAsync("CREATE TYPE int_list_type2 AS TABLE (n int NOT NULL PRIMARY KEY)");
+					await connection.ExecuteAsync("CREATE PROC get_values2 @ints int_list_type2 READONLY, @stringParam varchar(20), @dateParam datetime AS select i.*, @stringParam as stringParam, @dateParam as dateParam from @ints i");
 
-                    var dynamicParameters = new DynamicParameterWithIntTVP(new int[] { 1, 2, 3 });
-                    dynamicParameters.AddDynamicParams(new { stringParam = "stringParam", dateParam = new DateTime(2012, 1, 1) });
+					var dynamicParameters = new DynamicParameterWithIntTVP(new int[] { 1, 2, 3 }, "int_list_type2");
+					dynamicParameters.AddDynamicParams(new { stringParam = "stringParam", dateParam = new DateTime(2012, 1, 1) });
 
-                    var results = await connection.Query("get_values", dynamicParameters, commandType: CommandType.StoredProcedure).ToList();
-                    results.Count.IsEqualTo(3);
-                    for (int i = 0; i < results.Count; i++)
-                    {
-                        var result = results[i];
-                        Assert.IsEqualTo(i + 1, result.n);
-                        Assert.IsEqualTo("stringParam", result.stringParam);
-                        Assert.IsEqualTo(new DateTime(2012, 1, 1), result.dateParam);
-                    }
-
-                }
-                finally
-                {
-                    try
-                    {
-                        connection.ExecuteAsync("DROP PROC get_values").Wait();
-                    }
-                    finally
-                    {
-                        connection.ExecuteAsync("DROP TYPE int_list_type").Wait();
-                    }
-                }
-            }
+					var results = await connection.Query("get_values2", dynamicParameters, commandType: CommandType.StoredProcedure).ToList();
+					results.Count.IsEqualTo(3);
+					for (int i = 0; i < results.Count; i++)
+					{
+						var result = results[i];
+						Assert.IsEqualTo(i + 1, result.n);
+						Assert.IsEqualTo("stringParam", result.stringParam);
+						Assert.IsEqualTo(new DateTime(2012, 1, 1), result.dateParam);
+					}
+				}
+				finally
+				{
+					try
+					{
+						connection.ExecuteAsync("DROP PROC get_values2").Wait();
+					}
+					finally
+					{
+						connection.ExecuteAsync("DROP TYPE int_list_type2").Wait();
+					}
+				}
+			}
         }
 
         class IntCustomParam : SqlMapper.ICustomQueryParameter
         {
             IEnumerable<int> numbers;
-            public IntCustomParam(IEnumerable<int> numbers)
+	        private readonly string _intListType;
+
+	        public IntCustomParam(IEnumerable<int> numbers, string intListType)
             {
-                this.numbers = numbers;
+	            this.numbers = numbers;
+	            _intListType = intListType;
             }
 
-            public void AddParameter(DbCommand command, string name)
+	        public void AddParameter(DbCommand command, string name)
             {
                 var sqlCommand = (SqlCommand)command;
                 sqlCommand.CommandType = CommandType.StoredProcedure;
@@ -1733,40 +1743,39 @@ end");
                 // Add the table parameter.
                 var p = sqlCommand.Parameters.Add(name, SqlDbType.Structured);
                 p.Direction = ParameterDirection.Input;
-                p.TypeName = "int_list_type";
+                p.TypeName = _intListType;
                 p.Value = number_list;
             }
         }
 
         [Test]
-        public async Task TestTVPWithAnonymousObjectAsync()
+		public async Task TestTVPWithAnonymousObjectAsync()
         {
-            using (var connection = GetOpenConnection())
-            {
-                try
-                {
-                    await connection.ExecuteAsync("CREATE TYPE int_list_type AS TABLE (n int NOT NULL PRIMARY KEY)");
-                    await connection.ExecuteAsync("CREATE PROC get_ints @integers int_list_type READONLY AS select * from @integers");
+			using (var connection = GetOpenConnection())
+			{
+				try
+				{
+					await connection.ExecuteAsync("CREATE TYPE int_list_type3 AS TABLE (n int NOT NULL PRIMARY KEY)");
+					await connection.ExecuteAsync("CREATE PROC get_ints3 @integers int_list_type3 READONLY AS select * from @integers");
 
-                    var nums = await connection.Query<int>("get_ints", new { integers = new IntCustomParam(new int[] { 1, 2, 3 }) }, commandType: CommandType.StoredProcedure).ToList();
-                    nums[0].IsEqualTo(1);
-                    nums[1].IsEqualTo(2);
-                    nums[2].IsEqualTo(3);
-                    nums.Count.IsEqualTo(3);
-
-                }
-                finally
-                {
-                    try
-                    {
-                        connection.ExecuteAsync("DROP PROC get_ints").Wait();
-                    }
-                    finally
-                    {
-                        connection.ExecuteAsync("DROP TYPE int_list_type").Wait();
-                    }
-                }
-            }
+					var nums = await connection.Query<int>("get_ints3", new { integers = new IntCustomParam(new int[] { 1, 2, 3 }, "int_list_type3") }, commandType: CommandType.StoredProcedure).ToList();
+					nums[0].IsEqualTo(1);
+					nums[1].IsEqualTo(2);
+					nums[2].IsEqualTo(3);
+					nums.Count.IsEqualTo(3);
+				}
+				finally
+				{
+					try
+					{
+						connection.ExecuteAsync("DROP PROC get_ints3").Wait();
+					}
+					finally
+					{
+						connection.ExecuteAsync("DROP TYPE int_list_type3").Wait();
+					}
+				}
+			}
         }
 
         class Parent
@@ -1938,7 +1947,8 @@ end");
         }
 
         [Test]
-        public async Task TestMultiMapThreeTypesWithGridReaderAsync()
+		[TransactionRollback]
+		public async Task TestMultiMapThreeTypesWithGridReaderAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -1973,14 +1983,12 @@ Order by p.Id";
 
                 post2.Comment.Id.IsEqualTo(1);
                 post2.Owner.Id.IsEqualTo(99);
-
-
-                await connection.ExecuteAsync("drop table #Users drop table #Posts drop table #Comments");
             }
         }
 
         [Test]
-        public async Task TestReadDynamicWithGridReaderAsync()
+		[TransactionRollback]
+		public async Task TestReadDynamicWithGridReaderAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -2010,8 +2018,6 @@ Order by p.Id";
 
                 ((int) users.First().Id).IsEqualTo(2);
                 ((int) posts.First().Id).IsEqualTo(3);
-
-                await connection.ExecuteAsync("drop table #Users drop table #Posts");
             }
         }
 
@@ -2262,7 +2268,8 @@ Order by p.Id";
         }
 
         [Test]
-        public async Task TestProcWithOutParameterAsync()
+		[TransactionRollback]
+		public async Task TestProcWithOutParameterAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -2287,7 +2294,8 @@ Order by p.Id";
         }
 
         [Test]
-        public async Task TestProcWithOutAndReturnParameterAsync()
+		[TransactionRollback]
+		public async Task TestProcWithOutAndReturnParameterAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -2439,70 +2447,57 @@ Order by p.Id";
             {
                 await connection.ExecuteAsync("create table #TransactionTest ([ID] int, [Value] varchar(32));");
 
-                try
+                using (var transaction = connection.BeginTransaction())
                 {
-                    using (var transaction = connection.BeginTransaction())
-                    {
-                        await connection.ExecuteAsync("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
+                    await connection.ExecuteAsync("insert into #TransactionTest ([ID], [Value]) values (1, 'ABC');", transaction: transaction);
 
-                        transaction.Rollback();
-                    }
+                    transaction.Rollback();
+                }
 
-                    (await connection.Query<int>("select count(*) from #TransactionTest;").SingleAsync()).IsEqualTo(0);
-                }
-                finally
-                {
-                    connection.ExecuteAsync("drop table #TransactionTest;").Wait();
-                }
+                (await connection.Query<int>("select count(*) from #TransactionTest;").SingleAsync()).IsEqualTo(0);
             }
         }
 
         [Test]
-        public async Task TestReaderWhenResultsChangeAsync()
+		[TransactionRollback]
+		public async Task TestReaderWhenResultsChangeAsync()
         {
             using (var connection = GetOpenConnection())
             {
-                try
-                {
+                await
+                    connection.ExecuteAsync(
+                        "create table #ResultsChange (X int);create table #ResultsChange2 (Y int);insert #ResultsChange (X) values(1);insert #ResultsChange2 (Y) values(1);");
+
+                var obj1 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
+                obj1.X.IsEqualTo(1);
+                obj1.Y.IsEqualTo(0);
+                obj1.Z.IsEqualTo(0);
+
+                var obj2 =
                     await
-                        connection.ExecuteAsync(
-                            "create table #ResultsChange (X int);create table #ResultsChange2 (Y int);insert #ResultsChange (X) values(1);insert #ResultsChange2 (Y) values(1);");
+                    connection.Query<ResultsChangeType>(
+                        "select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X")
+                                .SingleAsync();
+                obj2.X.IsEqualTo(1);
+                obj2.Y.IsEqualTo(1);
+                obj2.Z.IsEqualTo(0);
 
-                    var obj1 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
-                    obj1.X.IsEqualTo(1);
-                    obj1.Y.IsEqualTo(0);
-                    obj1.Z.IsEqualTo(0);
+                await connection.ExecuteAsync("alter table #ResultsChange add Z int null");
+                await connection.ExecuteAsync("update #ResultsChange set Z = 2");
 
-                    var obj2 =
-                        await
-                        connection.Query<ResultsChangeType>(
-                            "select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X")
-                                  .SingleAsync();
-                    obj2.X.IsEqualTo(1);
-                    obj2.Y.IsEqualTo(1);
-                    obj2.Z.IsEqualTo(0);
+                var obj3 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
+                obj3.X.IsEqualTo(1);
+                obj3.Y.IsEqualTo(0);
+                obj3.Z.IsEqualTo(2);
 
-                    await connection.ExecuteAsync("alter table #ResultsChange add Z int null");
-                    await connection.ExecuteAsync("update #ResultsChange set Z = 2");
-
-                    var obj3 = await connection.Query<ResultsChangeType>("select * from #ResultsChange").SingleAsync();
-                    obj3.X.IsEqualTo(1);
-                    obj3.Y.IsEqualTo(0);
-                    obj3.Z.IsEqualTo(2);
-
-                    var obj4 =
-                        await
-                        connection.Query<ResultsChangeType>(
-                            "select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X")
-                                  .SingleAsync();
-                    obj4.X.IsEqualTo(1);
-                    obj4.Y.IsEqualTo(1);
-                    obj4.Z.IsEqualTo(2);
-                }
-                finally
-                {
-                    connection.ExecuteAsync("drop table #ResultsChange;drop table #ResultsChange2;").Wait();
-                }
+                var obj4 =
+                    await
+                    connection.Query<ResultsChangeType>(
+                        "select * from #ResultsChange rc inner join #ResultsChange2 rc2 on rc2.Y=rc.X")
+                                .SingleAsync();
+                obj4.X.IsEqualTo(1);
+                obj4.Y.IsEqualTo(1);
+                obj4.Z.IsEqualTo(2);
             }
         }
         class ResultsChangeType
@@ -2606,7 +2601,8 @@ Order by p.Id";
         }
 
         [Test]
-        public async Task TestParameterWithIndexerAsync()
+		[TransactionRollback]
+		public async Task TestParameterWithIndexerAsync()
         {
             using (var connection = GetOpenConnection())
             {
@@ -2874,7 +2870,8 @@ end");
         }
 
         [Test]
-        public async Task TestDapperTableMetadataRetrievalAsync()
+		[TransactionRollback]
+		public async Task TestDapperTableMetadataRetrievalAsync()
 		{
             using (var connection = GetOpenConnection())
             {
