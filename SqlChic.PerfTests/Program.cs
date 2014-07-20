@@ -43,12 +43,12 @@ namespace SqlChic.PerfTests
 
             int baseConcurrency = System.Environment.ProcessorCount;
 
-            const int warmupIterations = 2000;
-			const int iterations = 2000;
+            const int warmupIterations = 5000;
+			const int iterations = 5000;
 
 			using (StartLogSection(String.Format("PerfTests warming up", warmupIterations), teamCityDetected))
 			{
-				PerformanceTests.Run(warmupIterations, 1, (tn, tta, tte) => { });
+				PerformanceTests.Run(warmupIterations, 1, (tn, ts) => { });
 
 				RunGcCollect();				
 			}
@@ -118,9 +118,9 @@ namespace SqlChic.PerfTests
             Console.WriteLine();
         }
 
-        public static void LogTestToConsole(string testName, TimeSpan testTimeAverage, double testTimeAverageError)
+        public static void LogTestToConsole(string testName, TestStats stats)
         {
-			Console.WriteLine("{0,-45} {1,6:0.00}ms (err {2,4:00.0}%)", testName, testTimeAverage.TotalMilliseconds, testTimeAverageError*100.0);
+			Console.WriteLine("{0,-45} {1,6:0.000}ms, {2,6:0.000}ms, {3,6:0.000}ms", testName, stats.Median.TotalMilliseconds, stats.Mean.TotalMilliseconds, stats.StdDev.TotalMilliseconds);
         }
 
         private static void EnsureDBSetup()
@@ -191,4 +191,11 @@ end
 			}
 		}
     }
+
+	public struct TestStats
+	{
+		public TimeSpan Median;
+		public TimeSpan Mean;
+		public TimeSpan StdDev;
+	}
 }

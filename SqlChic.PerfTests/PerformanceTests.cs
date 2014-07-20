@@ -16,7 +16,7 @@ namespace SqlChic.PerfTests
 {
     internal static class PerformanceTests
     {
-		public static void Run(int iterations, int concurrency, Action<string, TimeSpan, double> resultLogger)
+		public static void Run(int iterations, int concurrency, Action<string, TestStats> resultLogger)
 		{
 			if (iterations < 1)
 				return;

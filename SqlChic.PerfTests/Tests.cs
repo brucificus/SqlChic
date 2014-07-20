@@ -8,9 +8,9 @@ namespace SqlChic.PerfTests
 {
 	internal class Tests : List<Test>
 	{
-		private readonly Action<string, TimeSpan, double> _resultLogger;
+		private readonly Action<string, TestStats> _resultLogger;
 
-		public Tests(Action<string,TimeSpan,double> resultLogger)
+		public Tests(Action<string,TestStats> resultLogger)
 		{
 			_resultLogger = resultLogger;
 		}
@@ -93,24 +93,17 @@ namespace SqlChic.PerfTests
 				}
 			}
 
-			// Remove outliers so that we get the best representation
-			var testTimingsPruned = this.ToDictionary(x => x, x =>
-				{
-					var timingsAverage = x.Timings.Average();
-					var timingsStdDev = x.Timings.StdDevFrom(timingsAverage);
-					return Tuple.Create(x.Timings.Where(y => (timingsAverage - y).Abs() <= timingsStdDev), x.Timings);
-				});
-			var testTimingsPrunedResults = testTimingsPruned.ToDictionary(x => x.Key, x =>
-				{
-					var prunedMeasurementsCount = x.Value.Item1.Count();
-					var originalMeasurementsCount = x.Value.Item2.Count();
-					var error = (double) (originalMeasurementsCount - prunedMeasurementsCount)/(double)originalMeasurementsCount;
-					return Tuple.Create(x.Value.Item1.Average(), error); 
-				});
 
-			foreach (var kvp in testTimingsPrunedResults.OrderBy(x=>x.Value.Item1))
+			foreach (var test in this.OrderBy(x => x.Timings.Sum()))
 			{
-				_resultLogger(kvp.Key.Name, kvp.Value.Item1, kvp.Value.Item2);
+				var mean = test.Timings.Average();
+				var testStats = new TestStats()
+					{
+						Median = test.Timings.Median(),
+						Mean = mean,
+						StdDev = test.Timings.StdDevFrom(mean)
+					};
+				_resultLogger(test.Name, testStats);
 			}
 		}
 	}

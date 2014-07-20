@@ -1,19 +1,17 @@
-Dapper - a simple object mapper for .Net
-========================================
+SqlChic - a simple *async* object mapper for .Net
+===============================================
 
 Features
 --------
-Dapper is a [single file](https://github.com/SamSaffron/dapper-dot-net/blob/master/Dapper/SqlMapper.cs) you can drop in to your project that will extend your IDbConnection interface.
+SqlChic extends your DbConnection with extension methods to make fully async database queries a breeze.
 
-It provides 3 helpers:
+Execute a query and map the results to a strongly typed IObservable
+-------------------------------------------------------------------
 
-Execute a query and map the results to a strongly typed List
-------------------------------------------------------------
-
-Note: all extension methods assume the connection is already open, they will fail if the connection is closed.
+Note: all extension methods leave the connection in the same open/closed state that it started in.
 
 ```csharp
-public static IEnumerable<T> Query<T>(this IDbConnection cnn, string sql, object param = null, SqlTransaction transaction = null, bool buffered = true)
+public static IObservable<T> Query<T>(this DbConnection cnn, string sql, object param = null, DbTransaction transaction = null)
 ```
 Example usage:
 
@@ -29,30 +27,30 @@ public class Dog
 }            
             
 var guid = Guid.NewGuid();
-var dog = connection.Query<Dog>("select Age = @Age, Id = @Id", new { Age = (int?)null, Id = guid });
+var dogs = await connection.Query<Dog>("select Age = @Age, Id = @Id", new { Age = (int?)null, Id = guid }).ToArray();
             
-dog.Count()
+dogs.Count()
     .IsEqualTo(1);
 
-dog.First().Age
+dogs.First().Age
     .IsNull();
 
-dog.First().Id
+dogs.First().Id
     .IsEqualTo(guid);
 ```
 
-Execute a query and map it to a list of dynamic objects
--------------------------------------------------------
+Execute a query and map it to an IObservable of dynamic objects
+---------------------------------------------------------------
 
 ```csharp
-public static IEnumerable<dynamic> Query (this IDbConnection cnn, string sql, object param = null, SqlTransaction transaction = null, bool buffered = true)
+public static IObservable<dynamic> Query(this DbConnection cnn, string sql, object param = null, DbTransaction transaction = null)
 ```
 This method will execute SQL and return a dynamic list.
 
 Example usage:
 
 ```csharp
-var rows = connection.Query("select 1 A, 2 B union all select 3, 4");
+var rows = await connection.Query("select 1 A, 2 B union all select 3, 4").ToArray();
 
 ((int)rows[0].A)
    .IsEqualTo(1);
@@ -71,13 +69,13 @@ Execute a Command that returns no results
 -----------------------------------------
 
 ```csharp
-public static int Execute(this IDbConnection cnn, string sql, object param = null, SqlTransaction transaction = null)
+public static async Task<int> ExecuteAsync(this DbConnection cnn, string sql, object param = null, DbTransaction transaction = null)
 ```
 
 Example usage:
 
 ```csharp
-connection.Execute(@"
+await connection.ExecuteAsync(@"
   set nocount on 
   create table #t(i int) 
   set nocount off 
@@ -96,7 +94,7 @@ The same signature also allows you to conveniently and efficiently execute a com
 Example usage:
 
 ```csharp
-connection.Execute(@"insert MyTable(colA, colB) values (@a, @b)",
+await connection.ExecuteAsync(@"insert MyTable(colA, colB) values (@a, @b)",
     new[] { new { a=1, b=1 }, new { a=2, b=2 }, new { a=3, b=3 } }
   ).IsEqualTo(3); // 3 rows inserted: "1,1", "2,2" and "3,3"
 ```
@@ -105,121 +103,91 @@ This works for any parameter that implements IEnumerable<T> for some T.
 Performance
 -----------
 
-A key feature of Dapper is performance. The following metrics show how long it takes to execute 500 SELECT statements against a DB and map the data returned to objects.
+The key feature of SqlChic is performance. The following metrics show how long it takes to execute SELECT statements against a DB and map the data returned to objects.
 
-The performance tests are broken in to 3 lists:
-
-- POCO serialization for frameworks that support pulling static typed objects from the DB. Using raw SQL.
-- Dynamic serialization for frameworks that support returning dynamic lists of objects.
-- Typical framework usage. Often typical framework usage differs from the optimal usage performance wise. Often it will not involve writing SQL.
-
-### Performance of SELECT mapping over 500 iterations - POCO serialization
+### Performance of SELECT mapping averaged over 5000 iterations
 
 <table>
-  <tr>
-  	<th>Method</th>
-		<th>Duration</th>		
+	<tr>
+  		<th>Method</th>
+		<th>Average Duration</th>		
+		<th>Times Slower than SqlChic</th>
 		<th>Remarks</th>
 	</tr>
 	<tr>
-		<td>Hand coded (using a <code>SqlDataReader</code>)</td>
-		<td>47ms</td>
-		<td rowspan="9"><a href="http://www.toptensoftware.com/Articles/94/PetaPoco-More-Speed">Can be faster</a></td>
-	</tr>
-	<tr>
-		<td>Dapper <code>ExecuteMapperQuery<Post></code></td>
-		<td>49ms</td>
-	</tr>
-	<tr>
-		<td><a href="https://github.com/ServiceStack/ServiceStack.OrmLite">ServiceStack.OrmLite</a> (QueryById)</td>
-		<td>50ms</td>
+		<td>SqlChic (Buffered)</td>
+		<td>0.0102ms</td>
+		<td>1x</td>
 	</tr>
 	<tr>
 		<td><a href="http://www.toptensoftware.com/petapoco/">PetaPoco</a></td>
-		<td>52ms</td>
+		<td>0.1911ms</td>
+		<td>19x</td>
 	</tr>
 	<tr>
-		<td>BLToolkit</td>
-		<td>80ms</td>
+		<td>Dapper (Non-buffered, Async)</td>
+		<td>0.2663ms</td>
+		<td>26x</td>
 	</tr>
 	<tr>
-		<td>SubSonic CodingHorror</td>
-		<td>107ms</td>
+		<td>Hand coded (using a <code>SqlDataReader</code>, Async)</td>
+		<td>0.2691ms</td>
+		<td>26x</td>
+	</tr>
+	<tr>
+		<td>Entity Framework (LINQ)</td>
+		<td>0.3786ms</td>
+		<td>37x</td>
 	</tr>
 	<tr>
 		<td>NHibernate SQL</td>
-		<td>104ms</td>
+		<td>0.3836ms</td>
+		<td>38x</td>
 	</tr>
 	<tr>
-		<td>Linq 2 SQL <code>ExecuteQuery</code></td>
-		<td>181ms</td>
-	</tr>
-	<tr>
-		<td>Entity framework <code>ExecuteStoreQuery</code></td>
-		<td>631ms</td>
-	</tr>
-</table>
-
-### Performance of SELECT mapping over 500 iterations - dynamic serialization
-
-<table>
-	<tr>
-		<th>Method</th>
-		<th>Duration</th>		
-		<th>Remarks</th>
-	</tr>
-	<tr>
-		<td>Dapper <code>ExecuteMapperQuery</code> (dynamic)</td>
-		<td>48ms</td>
-		<td rowspan="3">&nbsp;</td>
-	</tr>
-	<tr>
-		<td><a href="http://blog.wekeroad.com/helpy-stuff/and-i-shall-call-it-massive">Massive</a></td>
-		<td>52ms</td>
-	</tr>
-	<tr>
-		<td><a href="https://github.com/markrendle/Simple.Data">Simple.Data</a></td>
-		<td>95ms</td>
-	</tr>
-</table>
-
-
-### Performance of SELECT mapping over 500 iterations - typical usage
-
-<table>
-	<tr>
-		<th>Method</th>
-		<th>Duration</th>		
-		<th>Remarks</th>
-	</tr>
-	<tr>
-		<td>Linq 2 SQL CompiledQuery</td>
-		<td>81ms</td>
+		<td>Linq2Sql (CompiledQuery)</td>
+		<td>0.3866ms</td>
+		<td>38x</td>
 		<td>Not super typical involves complex code</td>
 	</tr>
 	<tr>
+		<td>SubSonic CodingHorror</td>
+		<td>0.3866ms</td>
+		<td>38x</td>
+	</tr>
+	<tr>
 		<td>NHibernate HQL</td>
-		<td>118ms</td>
-		<td>&nbsp;</td>
+		<td>0.3876ms</td>
+		<td>38x</td>
 	</tr>
 	<tr>
-		<td>Linq 2 SQL</td>
-		<td>559ms</td>
-		<td>&nbsp;</td>
+		<td>BLToolkit</td>
+		<td>0.3914ms</td>
+		<td>38x</td>
 	</tr>
 	<tr>
-		<td>Entity framework</td>
-		<td>859ms</td>
-		<td>&nbsp;</td>
+		<td>Linq2Sql <code>ExecuteQuery</code></td>
+		<td>0.5058ms</td>
+		<td>50x</td>
+	</tr>
+	<tr>
+		<td>Linq2Sql (LINQ)</td>
+		<td>1.1453ms</td>
+		<td>112x</td>
+	</tr>
+	<tr>
+		<td>Entity Framework (<code>ExecuteStoreQuery</code>)</td>
+		<td>1.3787ms</td>
+		<td>135x</td>
 	</tr>
 	<tr>
 		<td>SubSonic ActiveRecord.SingleOrDefault</td>
-		<td>3619ms</td>
-		<td>&nbsp;</td>
+		<td>7.3637ms</td>
+		<td>722x</td>
 	</tr>
 </table>
 
-Performance benchmarks are available [here](https://github.com/SamSaffron/dapper-dot-net/blob/master/Tests/PerformanceTests.cs)
+Performance benchmarks are available as part of the source code.
 
 Feel free to submit patches that include other ORMs - when running benchmarks, be sure to compile in Release and not attach a debugger (ctrl F5)
 
@@ -234,7 +202,7 @@ new {A = 1, B = "b"} // A will be mapped to the param @A, B to the param @B
 
 List Support
 ------------
-Dapper allow you to pass in IEnumerable<int> and will automatically parameterize your query.
+SqlChic allows you to pass in IEnumerable<int> and will automatically parameterize your query.
 
 For example:
 
@@ -250,13 +218,15 @@ select * from (select 1 as Id union all select 2 union all select 3) as X where 
 
 Buffered vs Unbuffered readers
 ---------------------
-Dapper's default behavior is to execute your sql and buffer the entire reader on return. This is ideal in most cases as it minimizes shared locks in the db and cuts down on db network time.
+SqlChic's default behavior is to execute your SQL and buffer the entire reader on return. This is ideal in most cases as it minimizes shared locks in the db and cuts down on db network time.
 
-However when executing huge queries you may need to minimize memory footprint and only load objects as needed. To do so pass, buffered: false into the Query method.
+However when executing huge queries you may need to minimize memory footprint and only load objects as needed.
+
+SqlChich will use buffered readers if the db connection it receives is closed. If the db connection is already open, SqlChic will not use buffered readers.
 
 Multi Mapping
 ---------------------
-Dapper allows you to map a single row to multiple objects. This is a key feature if you want to avoid extraneous querying and eager load associations.
+SqlChic allows you to map a single row to multiple objects. This is a key feature if you want to avoid extraneous querying and eager load associations.
 
 Example:
 
@@ -266,8 +236,8 @@ var sql =
 left join #Users u on u.Id = p.OwnerId 
 Order by p.Id";
  
-var data = connection.Query<Post, User, Post>(sql, (post, user) => { post.Owner = user; return post;});
-var post = data.First();
+var data = connection.QueryAsync<Post, User, Post>(sql, (post, user) => { post.Owner = user; return post;});
+var post = await data.FirstAsync();
  
 post.Content.IsEqualTo("Sams Post1");
 post.Id.IsEqualTo(1);
@@ -275,11 +245,11 @@ post.Owner.Name.IsEqualTo("Sam");
 post.Owner.Id.IsEqualTo(99);
 ```
 
-**important note** Dapper assumes your Id columns are named "Id" or "id", if your primary key is different or you would like to split the wide row at point other than "Id", use the optional 'splitOn' parameter.
+**important note** SqlChic assumes your Id columns are named "Id" or "id", if your primary key is different or you would like to split the wide row at point other than "Id", use the optional 'splitOn' parameter.
 
 Multiple Results
 ---------------------
-Dapper allows you to process multiple result grids in a single query.
+SqlChic allows you to process multiple result grids in a single query.
 
 Example:
 
@@ -290,41 +260,29 @@ select * from Customers where CustomerId = @id
 select * from Orders where CustomerId = @id
 select * from Returns where CustomerId = @id";
  
-using (var multi = connection.QueryMultiple(sql, new {id=selectedId}))
+using (var multi = await connection.QueryMultipleAsync(sql, new {id=selectedId}))
 {
-   var customer = multi.Read<Customer>().Single();
-   var orders = multi.Read<Order>().ToList();
-   var returns = multi.Read<Return>().ToList();
+   var customer = await multi.Read<Customer>().SingleAsync();
+   var orders = await multi.Read<Order>().ToList();
+   var returns = await multi.Read<Return>().ToList();
    ...
 } 
 ```
 
 Stored Procedures
 ---------------------
-Dapper supports fully stored procs:
+SqlChic supports stored procs:
 
 ```csharp
-var user = cnn.Query<User>("spGetUser", new {Id = 1}, 
-        commandType: CommandType.StoredProcedure).First();}}}
+var user = await cnn.Query<User>("spGetUser", new {Id = 1}, 
+        commandType: CommandType.StoredProcedure).FirstAsync();}}}
 ```
 
-If you want something more fancy, you can do:
-
-```csharp
-var p = new DynamicParameters();
-p.Add("@a", 11);
-p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-p.Add("@c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
-
-cnn.Execute("spMagicProc", p, commandType: commandType.StoredProcedure); 
-
-int b = p.Get<int>("@b");
-int c = p.Get<int>("@c"); 
-```
+...though output parameters are still a work in progress.
 
 Ansi Strings and varchar
 ---------------------
-Dapper supports varchar params, if you are executing a where clause on a varchar column using a param be sure to pass it in this way:
+SqlChic supports varchar params, if you are executing a where clause on a varchar column using a param be sure to pass it in this way:
 
 ```csharp
 Query<Thing>("select * from Thing where Name = @Name", new {Name = new DbString { Value = "abcde", IsFixedLength = true, Length = 10, IsAnsi = true });
@@ -334,24 +292,20 @@ On Sql Server it is crucial to use the unicode when querying unicode and ansi wh
 
 Limitations and caveats
 ---------------------
-Dapper caches information about every query it runs, this allow it to materialize objects quickly and process parameters quickly. The current implementation caches this information in a ConcurrentDictionary object. The objects it stores are never flushed. If you are generating SQL strings on the fly without using parameters it is possible you will hit memory issues. We may convert the dictionaries to an LRU Cache.
+SqlChic caches information about every query it runs, this allow it to materialize objects quickly and process parameters quickly. The current implementation caches this information in a ConcurrentDictionary object. The objects it stores are never flushed. If you are generating SQL strings on the fly without using parameters it is possible you will hit memory issues. We may convert the dictionaries to an LRU Cache.
 
-Dapper's simplicity means that many feature that ORMs ship with are stripped out, there is no identity map, there are no helpers for update / select and so on.
+SqlChic's simplicity means that many feature that ORMs ship with are stripped out, there is no identity map, there are no helpers for update / select and so on.
 
-Dapper does not manage your connection's lifecycle, it assumes the connection it gets is open AND has no existing datareaders enumerating (unless MARS is enabled)
+SqlChic does not manage your connection's lifecycle, it assumes the connection it gets is open (or open-able) AND has no existing datareaders enumerating (unless MARS is enabled)
 
-Will dapper work with my db provider?
+Will SqlChic work with my db provider?
 ---------------------
-Dapper has no DB specific implementation details, it works across all .net ado providers including sqlite, sqlce, firebird, oracle, MySQL and SQL Server
+SqlChic currently only supports MS SQL, to ensure full availability of async functionality.
 
 Do you have a comprehensive list of examples?
 ---------------------
-Dapper has a comprehensive test suite in the [test project](https://github.com/SamSaffron/dapper-dot-net/blob/master/Tests/Tests.cs)
+SqlChic has a comprehensive test suite in the source code.
 
-Who is using this?
----------------------
-Dapper is in production use at:
-
-[Stack Overflow](http://stackoverflow.com/), [xpfest.com](http://www.xapfest.com/), [helpdesk](http://www.jitbit.com/helpdesk-software/)
-
-(if you would like to be listed here let me know)
+Is this a Dapper fork?
+----------------------
+It is! Except it is fully and thoroughly async, down to the minutiae of using IObservable to represent data streaming back out of the database.
