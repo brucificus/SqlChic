@@ -2,14 +2,14 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata schemaVersion="2">
     <id>SqlChic</id>
-    <version>0.1</version>
+    <version>0.1.1-rc</version>
     <title>SqlChic</title>
     <authors>Sam Saffron,Marc Gravell,Bruce Markham</authors>
     <owners>Bruce Markham</owners>
     <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
-    <projectUrl>http://code.google.com/p/dapper-dot-net/</projectUrl>
+    <projectUrl>https://github.com/illuminus86/SqlChic</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>A high performance Micro-ORM supporting Sql Server, MySQL, Sqlite, SqlCE, Firebird etc., with full async support.</description>
+    <description>A high performance fully-async Micro-ORM for ADO.NET.</description>
     <summary>A high performance fully async Micro-ORM.</summary>
     <tags>orm sql micro-orm dapper async sqlchic</tags>
     <dependencies>
@@ -26,7 +26,7 @@
       <frameworkAssembly assemblyName="Microsoft.CSharp" targetFramework=".NETFramework4.0-Client, .NETFramework4.0" />
     </frameworkAssemblies>
     <releaseNotes>
-* SqlChic 0.1
+* SqlChic 0.1.1-rc
 *        - Refactored API to be fully async/await compliant, including IObservable where needed
 * Dapper 1.13   
 *        - Added support for Table Valued Parameters as part of anonymous objects
@@ -47,7 +47,7 @@
 *        - Fixed: enum support for T in Query-of-T
 *        - Added: dictionary support for parameters
     </releaseNotes>
-    <copyright>Copyright 2013 Sam Saffron, Bruce Markham</copyright>
+    <copyright>Copyright 2014 Sam Saffron, Bruce Markham</copyright>
   </metadata>
   <files>
     <file src="bin\Release\SqlChic.dll" target="lib\net45" />
