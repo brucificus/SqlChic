@@ -59,6 +59,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Database.cs" />
+    <Compile Include="IgnorePorpertyAttribute.cs" />
     <Compile Include="Snapshotter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SqlCompactDatabase.cs" />

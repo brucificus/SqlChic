@@ -113,6 +113,10 @@
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>
+    <ProjectReference Include="..\SqlChic.EntityFramework\SqlChic.EntityFramework.csproj">
+      <Project>{a0ffa221-9c3b-4fc4-8ade-d8a9df4a4b1c}</Project>
+      <Name>SqlChic.EntityFramework</Name>
+    </ProjectReference>
     <ProjectReference Include="..\SqlChic\SqlChic.csproj">
       <Project>{0fff5bc7-0a4b-4d87-835e-4fad70937507}</Project>
       <Name>SqlChic</Name>

@@ -2,10 +2,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.Common;
+using System.Data.Spatial;
 using System.Data.SqlClient;
+using System.Globalization;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Data.SqlServerCe;
 using System.IO;
@@ -26,6 +30,8 @@ namespace SqlChic.Tests
     {
         //SqlConnection connection = Program.GetOpenConnection();
         private const string connectionString = "Data Source=.;Initial Catalog=tempdb;Integrated Security=True;MultipleActiveResultSets=True";
+		private const string OleDbConnectionString = "Provider=SQLOLEDB;Data Source=.;Initial Catalog=tempdb;Integrated Security=SSPI";
+
         private SqlConnection GetOpenConnection()
         {
             var connection = new SqlConnection(connectionString);
@@ -201,7 +207,7 @@ namespace SqlChic.Tests
                     await
                     connection.Query<NoDefaultConstructor>(
                         "select CAST(NULL AS integer) A1,  CAST(NULL AS integer) b1, CAST(NULL AS real) f1, 'Dapper' s1, G1 = @id",
-                        new {Id = guid}).FirstAsync();
+                        new {id = guid}).FirstAsync();
                 nodef.A.IsEqualTo(0);
                 nodef.B.IsEqualTo(null);
                 nodef.F.IsEqualTo(0);
@@ -541,7 +547,7 @@ WHERE (first_name LIKE {0} OR last_name LIKE {0});";
                 string term = "F"; // the term the user searched for
 
                 await connection.ExecuteAsync(@"create table #users16726709 (first_name varchar(200), last_name varchar(200))
-insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('Tony','Farcus') insert #users16726709 values ('Albert','Tenof')");
+insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('Tony','Farcus') insert #users16726709 values ('Albert','TenoF')");
 
                 // Using Dapper
                 (await connection.Query(end_wildcard, new {search_term = term}).Count()).IsEqualTo(2);
@@ -613,7 +619,7 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             using (var connection = GetOpenConnection())
             {
                 var guid = Guid.NewGuid();
-                var dog = await connection.Query<Dog>("select '' as Extra, 1 as Age, 0.1 as Name1 , Id = @id", new { Id = guid }).ToList();
+                var dog = await connection.Query<Dog>("select '' as Extra, 1 as Age, 0.1 as Name1 , Id = @id", new { id = guid }).ToList();
 
                 dog.Count()
                    .IsEqualTo(1);
@@ -625,6 +631,22 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
                     .IsEqualTo(guid);
             }
         }
+
+		// see http://stackoverflow.com/q/18847510/23354
+		[Test]
+		public async Task TestOleDbParameters()
+		{
+			using (var conn = new System.Data.OleDb.OleDbConnection(OleDbConnectionString))
+			{
+				var row = await conn.Query("select Id = ?, Age = ?",
+					new { foo = 12, bar = 23 } // these names DO NOT MATTER!!!
+				).SingleAsync();
+				int age = row.Age;
+				int id = row.Id;
+				age.IsEqualTo(23);
+				id.IsEqualTo(12);
+			}
+		}
 
         [Test]
         public async Task TestStrongTypeAsync()
@@ -705,20 +727,22 @@ insert #users16726709 values ('Fred','Bloggs') insert #users16726709 values ('To
             }
         }
         
+#if PARAMETER_GET
 		// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
-		//[Test]
-		//public async Task TestExecuteCommandWithHybridParametersAsync()
-		//{
-		//	using (var connection = GetOpenConnection())
-		//	{
-		//		var p = new DynamicParameters(new {a = 1, b = 2});
-		//		p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.Output);
-		//		await connection.ExecuteAsync(@"set @c = @a + @b", p);
-		//		p.Get<int>("@c").IsEqualTo(3);
-		//	}
-		//}
+		[Test]
+		public async Task TestExecuteCommandWithHybridParametersAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var p = new DynamicParameters(new { a = 1, b = 2 });
+				p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.Output);
+				await connection.ExecuteAsync(@"set @c = @a + @b", p);
+				p.Get<int>("@c").IsEqualTo(3);
+			}
+		}
+#endif
 
-        [Test]
+		[Test]
 		[TransactionRollback]
         public async Task TestExecuteMultipleCommandAsync()
         {
@@ -1188,6 +1212,24 @@ Order by p.Id";
             }
         }
 
+		[Test]
+		public async Task ExecuteReader()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				using (var dt = new DataTable())
+				{
+					dt.Load(await connection.ExecuteReaderAsync("select 3 as [three], 4 as [four]"));
+					dt.Columns.Count.IsEqualTo(2);
+					dt.Columns[0].ColumnName.IsEqualTo("three");
+					dt.Columns[1].ColumnName.IsEqualTo("four");
+					dt.Rows.Count.IsEqualTo(1);
+					((int)dt.Rows[0][0]).IsEqualTo(3);
+					((int)dt.Rows[0][1]).IsEqualTo(4);
+				}
+			}
+		}
+
         private class TestFieldCaseAndPrivatesEntity
         {
             public int a { get; set; }
@@ -1381,23 +1423,25 @@ Order by p.Id";
             }
         }
 
+#if PARAMETER_GET
 		// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
-		//[Test]
-		//public async Task TestSupportForDynamicParametersAsync()
-		//{
-		//	using (var connection = GetOpenConnection())
-		//	{
-		//		var p = new DynamicParameters();
-		//		p.Add("name", "bob");
-		//		p.Add("age", dbType: DbType.Int32, direction: ParameterDirection.Output);
+		[Test]
+		public async Task TestSupportForDynamicParametersAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var p = new DynamicParameters();
+				p.Add("name", "bob");
+				p.Add("age", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-		//		(await connection.Query<string>("set @age = 11 select @name", p).FirstAsync()).IsEqualTo("bob");
+				(await connection.Query<string>("set @age = 11 select @name", p).FirstAsync()).IsEqualTo("bob");
 
-		//		p.Get<int>("age").IsEqualTo(11);
-		//	}
-		//}
+				p.Get<int>("age").IsEqualTo(11);
+			}
+		}
+#endif
 
-        [Test]
+		[Test]
         public async Task TestSupportForExpandoObjectParametersAsync()
         {
             using (var connection = GetOpenConnection())
@@ -1410,36 +1454,38 @@ Order by p.Id";
             }
         }
 
+#if PARAMETER_GET
 // TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
-//		[Test]
-//		[TransactionRollback]
-//		public async Task TestProcSupportAsync()
-//		{
-//			using (var connection = GetOpenConnection())
-//			{
-//				var p = new DynamicParameters();
-//				p.Add("a", 11);
-//				p.Add("b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-//				p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
+		[Test]
+		[TransactionRollback]
+		public async Task TestProcSupportAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var p = new DynamicParameters();
+				p.Add("a", 11);
+				p.Add("b", dbType: DbType.Int32, direction: ParameterDirection.Output);
+				p.Add("c", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
 
-//				await connection.ExecuteAsync(@"create proc #TestProc 
-//	@a int,
-//	@b int output
-//as 
-//begin
-//	set @b = 999
-//	select 1111
-//	return @a
-//end");
-//				(await connection.Query<int>("#TestProc", p, commandType: CommandType.StoredProcedure).FirstAsync())
-//					.IsEqualTo(1111);
+				await connection.ExecuteAsync(@"create proc #TestProc 
+	@a int,
+	@b int output
+as 
+begin
+	set @b = 999
+	select 1111
+	return @a
+end");
+				(await connection.Query<int>("#TestProc", p, commandType: CommandType.StoredProcedure).FirstAsync())
+					.IsEqualTo(1111);
 
-//				p.Get<int>("c").IsEqualTo(11);
-//				p.Get<int>("b").IsEqualTo(999);
-//			}
-//		}
+				p.Get<int>("c").IsEqualTo(11);
+				p.Get<int>("b").IsEqualTo(999);
+			}
+		}
+#endif
 
-        [Test]
+		[Test]
         public async Task TestDbStringAsync()
         {
             using (var connection = GetOpenConnection())
@@ -1534,6 +1580,42 @@ Order by p.Id";
             }
         }
 
+		[Test]
+		public async Task TestMultiMappingWithNonReturnedPropertyAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var sql = @"select 
+								1 as PostId, 'Title' as Title,
+								2 as BlogId, 'Blog' as Title";
+				var postWithBlog = await connection.Query<Post_DupeProp, Blog_DupeProp, Post_DupeProp>(sql,
+					(p, b) =>
+					{
+						p.Blog = b;
+						return p;
+					}, splitOn: "BlogId").FirstAsync();
+
+				postWithBlog.PostId.IsEqualTo(1);
+				postWithBlog.Title.IsEqualTo("Title");
+				postWithBlog.Blog.BlogId.IsEqualTo(2);
+				postWithBlog.Blog.Title.IsEqualTo("Blog");				
+			}
+		}
+
+		class Post_DupeProp
+		{
+			public int PostId { get; set; }
+			public string Title { get; set; }
+			public int BlogId { get; set; }
+			public Blog_DupeProp Blog { get; set; }
+		}
+
+		class Blog_DupeProp
+		{
+			public int BlogId { get; set; }
+			public string Title { get; set; }
+		}
+
         [Test]
         public async Task TestFastExpandoSupportsIDictionaryAsync()
         {
@@ -1607,6 +1689,7 @@ Order by p.Id";
 
         // SQL Server specific test to demonstrate TVP 
         [Test]
+		// NOTE: Can't use rollback because SQL server doesn't handle custom-type creation in transactions well
         public async Task TestTVPAsync()
         {
 			using (var connection = GetOpenConnection())
@@ -1974,7 +2057,7 @@ Order by p.Id";
 
 select p.*, u.Id, u.Name + '0' Name, c.Id, c.CommentData from #Posts p 
 left join #Users u on u.Id = p.OwnerId 
-left join #Comments c on c.postId = p.Id
+left join #Comments c on c.PostId = p.Id
 where p.Id = 1
 Order by p.Id";
 
@@ -2024,21 +2107,24 @@ Order by p.Id";
             }
         }
 
+#if PARAMETER_GET
 		// TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
-		//[Test]
-		//public async Task TestDynamicParamNullSupportAsync()
-		//{
-		//	using (var connection = GetOpenConnection())
-		//	{
-		//		var p = new DynamicParameters();
+		[Test]
+		public async Task TestDynamicParamNullSupportAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var p = new DynamicParameters();
 
-		//		p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
-		//		await connection.ExecuteAsync("select @b = null", p);
+				p.Add("@b", dbType: DbType.Int32, direction: ParameterDirection.Output);
+				await connection.ExecuteAsync("select @b = null", p);
 
-		//		p.Get<int?>("@b").IsNull();
-		//	}
-		//}
-        class Foo1
+				p.Get<int?>("@b").IsNull();
+			}
+		}
+#endif
+
+		class Foo1
         {
 #pragma warning disable 0649
             public int Id;
@@ -2271,63 +2357,66 @@ Order by p.Id";
             }
         }
 
+#if PARAMETER_GET
 // TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
-//		[Test]
-//		[TransactionRollback]
-//		public async Task TestProcWithOutParameterAsync()
-//		{
-//			using (var connection = GetOpenConnection())
-//			{
-//				await connection.ExecuteAsync(
-//					@"CREATE PROCEDURE #TestProcWithOutParameter
-//        @ID int output,
-//        @Foo varchar(100),
-//        @Bar int
-//        AS
-//        SET @ID = @Bar + LEN(@Foo)");
-//				var obj = new
-//					{
-//						ID = 0,
-//						Foo = "abc",
-//						Bar = 4
-//					};
-//				var args = new DynamicParameters(obj);
-//				args.Add("ID", 0, direction: ParameterDirection.Output);
-//				await connection.ExecuteAsync("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
-//				args.Get<int>("ID").IsEqualTo(7);
-//			}
-//		}
+		[Test]
+		[TransactionRollback]
+		public async Task TestProcWithOutParameterAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				await connection.ExecuteAsync(
+					@"CREATE PROCEDURE #TestProcWithOutParameter
+        @ID int output,
+        @Foo varchar(100),
+        @Bar int
+        AS
+        SET @ID = @Bar + LEN(@Foo)");
+				var obj = new
+					{
+						ID = 0,
+						Foo = "abc",
+						Bar = 4
+					};
+				var args = new DynamicParameters(obj);
+				args.Add("ID", 0, direction: ParameterDirection.Output);
+				await connection.ExecuteAsync("#TestProcWithOutParameter", args, commandType: CommandType.StoredProcedure);
+				args.Get<int>("ID").IsEqualTo(7);
+			}
+		}
 
 // TOFIX: Removed DP's Get because it didn't behave correctly, so this test got removed with it.
-//		[Test]
-//		[TransactionRollback]
-//		public async Task TestProcWithOutAndReturnParameterAsync()
-//		{
-//			using (var connection = GetOpenConnection())
-//			{
-//				await connection.ExecuteAsync(
-//					@"CREATE PROCEDURE #TestProcWithOutAndReturnParameter
-//        @ID int output,
-//        @Foo varchar(100),
-//        @Bar int
-//        AS
-//        SET @ID = @Bar + LEN(@Foo)
-//        RETURN 42");
-//				var obj = new
-//				{
-//					ID = 0,
-//					Foo = "abc",
-//					Bar = 4
-//				};
-//				var args = new DynamicParameters(obj);
-//				args.Add("ID", 0, direction: ParameterDirection.Output);
-//				args.Add("result", 0, direction: ParameterDirection.ReturnValue);
-//				await connection.ExecuteAsync("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
-//				args.Get<int>("ID").IsEqualTo(7);
-//				args.Get<int>("result").IsEqualTo(42);
-//			}
-//		}
-        struct CanHazInt
+		[Test]
+		[TransactionRollback]
+		public async Task TestProcWithOutAndReturnParameterAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				await connection.ExecuteAsync(
+					@"CREATE PROCEDURE #TestProcWithOutAndReturnParameter
+        @ID int output,
+        @Foo varchar(100),
+        @Bar int
+        AS
+        SET @ID = @Bar + LEN(@Foo)
+        RETURN 42");
+				var obj = new
+				{
+					ID = 0,
+					Foo = "abc",
+					Bar = 4
+				};
+				var args = new DynamicParameters(obj);
+				args.Add("ID", 0, direction: ParameterDirection.Output);
+				args.Add("result", 0, direction: ParameterDirection.ReturnValue);
+				await connection.ExecuteAsync("#TestProcWithOutAndReturnParameter", args, commandType: CommandType.StoredProcedure);
+				args.Get<int>("ID").IsEqualTo(7);
+				args.Get<int>("result").IsEqualTo(42);
+			}
+		}
+#endif
+
+		struct CanHazInt
         {
             public int Value { get; set; }
         }
@@ -2622,6 +2711,30 @@ end");
             }
         }
 
+		public class MultipleParametersWithIndexerDeclaringType
+		{
+			public object this[object field] { get { return null; } set { } }
+			public object this[object field, int index] { get { return null; } set { } }
+			public int B { get; set; }
+		}
+
+		public class MultipleParametersWithIndexer : MultipleParametersWithIndexerDeclaringType
+		{
+			public int A { get; set; }
+		}
+
+		[Test]
+		public async Task TestMultipleParametersWithIndexerAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var order = await connection.Query<MultipleParametersWithIndexer>("select 1 A,2 B").FirstAsync();
+
+				order.A.IsEqualTo(1);
+				order.B.IsEqualTo(2);
+			}
+		}
+
         [Test]
         public async Task Issue_40_AutomaticBoolConversionAsync()
         {
@@ -2857,6 +2970,53 @@ end");
             }
         }
 
+		// see http://stackoverflow.com/questions/16955357/issue-about-dapper
+		[Test]
+		public async Task TestSplitWithMissingMembersAsync()
+		{
+			using (var connection = GetClosedConnection())
+			{
+				var result = await connection.Query<Topic, Profile, Topic>(
+				@"select 123 as ID, 'abc' as Title,
+						 cast('01 Feb 2013' as datetime) as CreateDate,
+						 'ghi' as Name, 'def' as Phone",
+				(T, P) => { T.Author = P; return T; },
+				null, null, "ID,Name").SingleAsync();
+
+				result.ID.Equals(123);
+				result.Title.Equals("abc");
+				result.CreateDate.Equals(new DateTime(2013, 2, 1));
+				result.Name.IsNull();
+				result.Content.IsNull();
+
+				result.Author.Phone.Equals("def");
+				result.Author.Name.Equals("ghi");
+				result.Author.ID.Equals(0);
+				result.Author.Address.IsNull();				
+			}
+		}
+		public class Profile
+		{
+			public int ID { get; set; }
+			public string Name { get; set; }
+			public string Phone { get; set; }
+			public string Address { get; set; }
+			//public ExtraInfo Extra { get; set; }
+		}
+
+		public class Topic
+		{
+			public int ID { get; set; }
+			public string Title { get; set; }
+			public DateTime CreateDate { get; set; }
+			public string Content { get; set; }
+			public int UID { get; set; }
+			public int TestColum { get; set; }
+			public string Name { get; set; }
+			public Profile Author { get; set; }
+			//public Attachment Attach { get; set; }
+		}
+
         // see http://stackoverflow.com/questions/13127886/dapper-returns-null-for-singleordefaultdatediff
         [Test]
         public async Task TestNullFromInt_NoRowsAsync()
@@ -2898,6 +3058,632 @@ end");
                 ((string) first.value).IsEqualTo("test");
             }
 		}
+
+#if PARAMETER_GET
+		[Test]
+		[TransactionRollback]
+		public async Task TestIssue17648290Async()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var p = new DynamicParameters();
+				int code = 1, getMessageControlId = 2;
+				p.Add("@Code", code);
+				p.Add("@MessageControlID", getMessageControlId);
+				p.Add("@SuccessCode", dbType: DbType.Int32, direction: ParameterDirection.Output);
+				p.Add("@ErrorDescription", dbType: DbType.String, direction: ParameterDirection.Output, size: 255);
+				await connection.ExecuteAsync(@"CREATE PROCEDURE #up_MessageProcessed_get
+			@Code varchar(10),
+			@MessageControlID varchar(22),
+			@SuccessCode int OUTPUT,
+			@ErrorDescription varchar(255) OUTPUT
+			AS
+
+			BEGIN
+
+			Select 2 as MessageProcessID, 38349348 as StartNum, 3874900 as EndNum, GETDATE() as StartDate, GETDATE() as EndDate
+			SET @SuccessCode = 0
+			SET @ErrorDescription = 'Completed successfully'
+			END");
+				var row = await connection.Query(sql: "#up_MessageProcessed_get", param: p, commandType: CommandType.StoredProcedure).SingleAsync();
+				((int)row.MessageProcessID).IsEqualTo(2);
+				((int)row.StartNum).IsEqualTo(38349348);
+				((int)row.EndNum).IsEqualTo(3874900);
+				DateTime startDate = row.StartDate, endDate = row.EndDate;
+				p.Get<int>("SuccessCode").IsEqualTo(0);
+				p.Get<string>("ErrorDescription").IsEqualTo("Completed successfully");				
+			}
+		}
+#endif
+
+		[Test]
+		public async Task TestDoubleDecimalConversions_SO18228523_RightWayAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var row = await connection.Query<HasDoubleDecimal>(
+					"select cast(1 as float) as A, cast(2 as float) as B, cast(3 as decimal) as C, cast(4 as decimal) as D").SingleAsync();
+				row.A.Equals(1.0);
+				row.B.Equals(2.0);
+				row.C.Equals(3.0M);
+				row.D.Equals(4.0M);
+			}
+		}
+
+		[Test]
+		public async Task TestDoubleDecimalConversions_SO18228523_WrongWayAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var row = await connection.Query<HasDoubleDecimal>(
+					"select cast(1 as decimal) as A, cast(2 as decimal) as B, cast(3 as float) as C, cast(4 as float) as D").SingleAsync();
+				row.A.Equals(1.0);
+				row.B.Equals(2.0);
+				row.C.Equals(3.0M);
+				row.D.Equals(4.0M);
+			}
+		}
+
+		[Test]
+		public async Task TestDoubleDecimalConversions_SO18228523_NullsAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var row = await connection.Query<HasDoubleDecimal>(
+					"select cast(null as decimal) as A, cast(null as decimal) as B, cast(null as float) as C, cast(null as float) as D").SingleAsync();
+				row.A.Equals(0.0);
+				row.B.IsNull();
+				row.C.Equals(0.0M);
+				row.D.IsNull();	
+			}
+		}
+
+		[Test]
+		public async Task TestParameterInclusionNotSensitiveToCurrentCultureAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				CultureInfo current = Thread.CurrentThread.CurrentCulture;
+				try
+				{
+					Thread.CurrentThread.CurrentCulture = new CultureInfo("tr-TR");
+
+					await connection.Query<int>("select @pid", new { PId = 1 }).SingleAsync();
+				}
+				finally
+				{
+					Thread.CurrentThread.CurrentCulture = current;
+				}
+			}
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task LiteralReplacementAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				await connection.ExecuteAsync("create table #literal1 (id int not null, foo int not null)");
+				await connection.ExecuteAsync("insert #literal1 (id,foo) values ({=id}, @foo)", new { id = 123, foo = 456 });
+				var rows = new[] { new { id = 1, foo = 2 }, new { id = 3, foo = 4 } };
+				await connection.ExecuteAsync("insert #literal1 (id,foo) values ({=id}, @foo)", rows);
+				var count = await connection.Query<int>("select count(1) from #literal1 where id={=foo}", new { foo = 123 }).SingleAsync();
+				count.IsEqualTo(1);
+				int sum = await connection.Query<int>("select sum(id) + sum(foo) from #literal1").SingleAsync();
+				sum.IsEqualTo(123 + 456 + 1 + 2 + 3 + 4);
+			}
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task LiteralReplacementDynamicAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var args = new DynamicParameters();
+				args.Add("id", 123);
+				await connection.ExecuteAsync("create table #literal2 (id int not null)");
+				await connection.ExecuteAsync("insert #literal2 (id) values ({=id})", args);
+
+				args = new DynamicParameters();
+				args.Add("foo", 123);
+				var count = await connection.Query<int>("select count(1) from #literal2 where id={=foo}", args).SingleAsync();
+				count.IsEqualTo(1);
+			}
+		}
+
+		enum AnEnum
+		{
+			A = 2,
+			B = 1
+		}
+		enum AnotherEnum : byte
+		{
+			A = 2,
+			B = 1
+		}
+		public async Task LiteralReplacementEnumAndStringAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var args = new { x = AnEnum.B, y = 123.45M, z = AnotherEnum.A };
+				var row = await connection.Query("select {=x} as x,{=y} as y,cast({=z} as tinyint) as z", args).SingleAsync();
+				AnEnum x = (AnEnum)(int)row.x;
+				decimal y = row.y;
+				AnotherEnum z = (AnotherEnum)(byte)row.z;
+				x.Equals(AnEnum.B);
+				y.Equals(123.45M);
+				z.Equals(AnotherEnum.A);
+			}
+		}
+		public async Task LiteralReplacementDynamicEnumAndStringAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var args = new DynamicParameters();
+				args.Add("x", AnEnum.B);
+				args.Add("y", 123.45M);
+				args.Add("z", AnotherEnum.A);
+				var row = await connection.Query("select {=x} as x,{=y} as y,cast({=z} as tinyint) as z", args).SingleAsync();
+				AnEnum x = (AnEnum)(int)row.x;
+				decimal y = row.y;
+				AnotherEnum z = (AnotherEnum)(byte)row.z;
+				x.Equals(AnEnum.B);
+				y.Equals(123.45M);
+				z.Equals(AnotherEnum.A);
+			}
+		}
+
+		public async Task LiteralReplacementWithInAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var data = await connection.Query<MyRow>("select @x where 1 in @ids and 1 ={=a}",
+					new { x = 1, ids = new[] { 1, 2, 3 }, a = 1 }).ToList();
+			}
+		}
+
+		class MyRow
+		{
+			public int x { get; set; }
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task LiteralInAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				await connection.ExecuteAsync("create table #literalin(id int not null);");
+				await connection.ExecuteAsync("insert #literalin (id) values (@id)", new[] {
+                new { id = 1 },
+                new { id = 2 },
+                new { id = 3 },
+            });
+				var count = await connection.Query<int>("select count(1) from #literalin where id in {=ids}",
+					new { ids = new[] { 1, 3, 4 } }).SingleAsync();
+				count.IsEqualTo(2);
+			}
+		}
+
+		[Test]
+		public async Task ParameterizedInWithOptimizeHintTask()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				const string sql = @"
+select count(1)
+from(
+    select 1 as x
+    union all select 2
+    union all select 5) y
+where y.x in @vals
+option (optimize for (@vals unKnoWn))";
+				int count = await connection.Query<int>(sql, new { vals = new[] { 1, 2, 3, 4 } }).SingleAsync();
+				count.IsEqualTo(2);
+
+				count = await connection.Query<int>(sql, new { vals = new[] { 1 } }).SingleAsync();
+				count.IsEqualTo(1);
+
+				count = await connection.Query<int>(sql, new { vals = new int[0] }).SingleAsync();
+				count.IsEqualTo(0);
+			}
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task TestProcedureWithTimeParameterAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var p = new DynamicParameters();
+				p.Add("a", TimeSpan.FromHours(10), dbType: DbType.Time);
+
+				await connection.ExecuteAsync(@"CREATE PROCEDURE #TestProcWithTimeParameter
+    @a TIME
+    AS 
+    BEGIN
+    SELECT @a
+    END");
+				(await connection.Query<TimeSpan>("#TestProcWithTimeParameter", p, commandType: CommandType.StoredProcedure).FirstAsync()).IsEqualTo(new TimeSpan(10, 0, 0));
+			}
+		}
+
+		[Test]
+		public async Task DbStringAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var a = await connection.Query<int>("select datalength(@x)",
+					new { x = new DbString { Value = "abc", IsAnsi = true } }).SingleAsync();
+				var b = await connection.Query<int>("select datalength(@x)",
+					new { x = new DbString { Value = "abc", IsAnsi = false } }).SingleAsync();
+				a.IsEqualTo(3);
+				b.IsEqualTo(6);
+			}
+		}
+
+		class HasInt32
+		{
+			public int Value { get; set; }
+		}
+		
+		// http://stackoverflow.com/q/23696254/23354
+		[Test]
+		public async Task DownwardIntegerConversionAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				const string sql = "select cast(42 as bigint) as Value";
+				int i = (await connection.Query<HasInt32>(sql).SingleAsync()).Value;
+				Assert.IsEqualTo(42, i);
+
+				i = await connection.Query<int>(sql).SingleAsync();
+				Assert.IsEqualTo(42, i);
+			}
+		}
+
+		class HasDoubleDecimal
+		{
+			public double A { get; set; }
+			public double? B { get; set; }
+			public decimal C { get; set; }
+			public decimal? D { get; set; }
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task DataTableParametersAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				try { await connection.ExecuteAsync("drop proc #DataTableParameters"); }
+				catch { }
+				try { await connection.ExecuteAsync("drop table #DataTableParameters"); }
+				catch { }
+				try { await connection.ExecuteAsync("drop type MyTVPType"); }
+				catch { }
+				await connection.ExecuteAsync("create type MyTVPType as table (id int)");
+				await connection.ExecuteAsync("create proc #DataTableParameters @ids MyTVPType readonly as select count(1) from @ids");
+
+				var table = new DataTable { Columns = { { "id", typeof(int) } }, Rows = { { 1 }, { 2 }, { 3 } } };
+
+				int count = await connection.Query<int>("#DataTableParameters", new { ids = table.AsTableValuedParameter() }, commandType: CommandType.StoredProcedure).FirstAsync();
+				count.IsEqualTo(3);
+
+				count = await connection.Query<int>("select count(1) from @ids", new { ids = table.AsTableValuedParameter("MyTVPType") }).FirstAsync();
+				count.IsEqualTo(3);
+
+				try
+				{
+					await connection.Query<int>("select count(1) from @ids", new { ids = table.AsTableValuedParameter() }).FirstAsync();
+					throw new InvalidOperationException();
+				}
+				catch (Exception ex)
+				{
+					ex.Message.Equals("The table type parameter 'ids' must have a valid type name.");
+				}
+			}
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task DataTableParametersWithExtendedPropertyAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				try { await connection.ExecuteAsync("drop proc #DataTableParameters"); }
+				catch { }
+				try { await connection.ExecuteAsync("drop table #DataTableParameters"); }
+				catch { }
+				try { await connection.ExecuteAsync("drop type MyTVPType"); }
+				catch { }
+				await connection.ExecuteAsync("create type MyTVPType as table (id int)");
+				await connection.ExecuteAsync("create proc #DataTableParameters @ids MyTVPType readonly as select count(1) from @ids");
+
+				var table = new DataTable { Columns = { { "id", typeof(int) } }, Rows = { { 1 }, { 2 }, { 3 } } };
+				table.SetTypeName("MyTVPType"); // <== extended metadata
+				int count = await connection.Query<int>("#DataTableParameters", new { ids = table }, commandType: CommandType.StoredProcedure).FirstAsync();
+				count.IsEqualTo(3);
+
+				count = await connection.Query<int>("select count(1) from @ids", new { ids = table }).FirstAsync();
+				count.IsEqualTo(3);
+
+				try
+				{
+					await connection.Query<int>("select count(1) from @ids", new { ids = table }).FirstAsync();
+					throw new InvalidOperationException();
+				}
+				catch (Exception ex)
+				{
+					ex.Message.Equals("The table type parameter 'ids' must have a valid type name.");
+				}
+			}
+		}
+
+		[Test]
+		public async Task SupportInitAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var obj = await connection.Query<WithInit>("select 'abc' as Value").SingleAsync();
+				obj.Value.Equals("abc");
+				obj.Flags.Equals(31);
+			}
+		}
+
+		[Test]
+		public async Task GuidIn_SO_24177902Async()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				// invent and populate
+				Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid(), d = Guid.NewGuid();
+				await connection.ExecuteAsync("create table #foo (i int, g uniqueidentifier)");
+				await connection.ExecuteAsync("insert #foo(i,g) values(@i,@g)",
+					new[] { new { i = 1, g = a }, new { i = 2, g = b },
+                new { i = 3, g = c },new { i = 4, g = d }});
+
+				// check that rows 2&3 yield guids b&c
+				var guids = await connection.Query<Guid>("select g from #foo where i in (2,3)").ToArray();
+				guids.Length.Equals(2);
+				guids.Contains(a).Equals(false);
+				guids.Contains(b).Equals(true);
+				guids.Contains(c).Equals(true);
+				guids.Contains(d).Equals(false);
+
+				// in query on the guids
+				var rows = await connection.Query("select * from #foo where g in @guids order by i", new { guids })
+					.Select(row => new { i = (int)row.i, g = (Guid)row.g }).ToArray();
+				rows.Length.Equals(2);
+				rows[0].i.Equals(2);
+				rows[0].g.Equals(b);
+				rows[1].i.Equals(3);
+				rows[1].g.Equals(c);
+			}
+		}
+
+		class HazGeo
+		{
+			public int Id { get; set; }
+			public DbGeography Geo { get; set; }
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task DBGeography_SO24405645_SO24402424Async()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				SqlChic.EntityFramework.Handlers.Register();
+
+				await connection.ExecuteAsync("create table #Geo (id int, geo geography)");
+
+				var obj = new HazGeo
+				{
+					Id = 1,
+					Geo = DbGeography.LineFromText("LINESTRING(-122.360 47.656, -122.343 47.656 )", 4326)
+				};
+				await connection.ExecuteAsync("insert #Geo(id, geo) values (@Id, @Geo)", obj);
+				var row = await connection.Query<HazGeo>("select * from #Geo where id=1").SingleOrDefaultAsync();
+				row.IsNotNull();
+				row.Id.IsEqualTo(1);
+				row.Geo.IsNotNull();
+			}
+		}
+
+		[Test]
+		public async Task TypeBasedViaDynamicAsync()
+		{
+			Type type = GetSomeType();
+
+			dynamic template = Activator.CreateInstance(type);
+			dynamic actual = await CheetViaDynamicAsync(template, "select @A as [A], @B as [B]", new { A = 123, B = "abc" });
+			((object)actual).GetType().IsEqualTo(type);
+			int a = actual.A;
+			string b = actual.B;
+			a.IsEqualTo(123);
+			b.IsEqualTo("abc");
+		}
+
+		[Test]
+		public async Task TypeBasedViaTypeAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				Type type = GetSomeType();
+
+				dynamic actual = await connection.Query(type, "select @A as [A], @B as [B]", new { A = 123, B = "abc" }).FirstOrDefaultAsync();
+				((object)actual).GetType().IsEqualTo(type);
+				int a = actual.A;
+				string b = actual.B;
+				a.IsEqualTo(123);
+				b.IsEqualTo("abc");
+			}
+		}
+
+		[Test]
+		public async Task TypeBasedViaTypeMultiAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				Type type = GetSomeType();
+
+				dynamic first, second;
+				using (var multi = await connection.QueryMultipleAsync("select @A as [A], @B as [B]; select @C as [A], @D as [B]",
+					new { A = 123, B = "abc", C = 456, D = "def" }))
+				{
+					first = await multi.Read(type).SingleAsync();
+					second = await multi.Read(type).SingleAsync();
+				}
+				((object)first).GetType().IsEqualTo(type);
+				int a = first.A;
+				string b = first.B;
+				a.IsEqualTo(123);
+				b.IsEqualTo("abc");
+
+				((object)second).GetType().IsEqualTo(type);
+				a = second.A;
+				b = second.B;
+				a.IsEqualTo(456);
+				b.IsEqualTo("def");
+			}
+		}
+		async Task<T> CheetViaDynamicAsync<T>(T template, string query, object args)
+		{
+			using (var connection = GetOpenConnection())
+			{
+				return await connection.Query<T>(query, args).SingleOrDefaultAsync();
+			}
+		}
+		static Type GetSomeType()
+		{
+			return typeof(SomeType);
+		}
+		public class SomeType
+		{
+			public int A { get; set; }
+			public string B { get; set; }
+		}
+
+		class WithInit : ISupportInitialize
+		{
+			public string Value { get; set; }
+			public int Flags { get; set; }
+
+			void ISupportInitialize.BeginInit()
+			{
+				Flags += 1;
+			}
+
+			void ISupportInitialize.EndInit()
+			{
+				Flags += 30;
+			}
+		}
+
+		[Test]
+		public async Task SO24607639_NullableBoolsAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				var obj = await connection.Query<HazBools>(
+					@"declare @vals table (A bit null, B bit null, C bit null);
+                insert @vals (A,B,C) values (1,0,null);
+                select * from @vals").SingleAsync();
+				obj.IsNotNull();
+				obj.A.Value.IsEqualTo(true);
+				obj.B.Value.IsEqualTo(false);
+				obj.C.IsNull();
+			}
+		}
+		class HazBools
+		{
+			public bool? A { get; set; }
+			public bool? B { get; set; }
+			public bool? C { get; set; }
+		}
+
+		[Test]
+		[TransactionRollback]
+		public async Task SO24605346_ProcsAndStringsAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				await connection.ExecuteAsync(@"create proc #GetPracticeRebateOrderByInvoiceNumber @TaxInvoiceNumber nvarchar(20) as
+                select @TaxInvoiceNumber as [fTaxInvoiceNumber]");
+				string InvoiceNumber = "INV0000000028PPN";
+				var result = await connection.Query<PracticeRebateOrders>("#GetPracticeRebateOrderByInvoiceNumber", new
+				{
+					TaxInvoiceNumber = InvoiceNumber
+				}, commandType: CommandType.StoredProcedure).FirstOrDefaultAsync();
+
+				result.TaxInvoiceNumber.IsEqualTo("INV0000000028PPN");
+			}
+		}
+		class PracticeRebateOrders
+		{
+			public string fTaxInvoiceNumber;
+			[System.Xml.Serialization.XmlElementAttribute(Form = System.Xml.Schema.XmlSchemaForm.Unqualified)]
+			public string TaxInvoiceNumber { get { return fTaxInvoiceNumber; } set { fTaxInvoiceNumber = value; } }
+		}
+
+		public class RatingValueHandler : SqlChic.SqlMapper.TypeHandler<RatingValue>
+		{
+			private RatingValueHandler() { }
+			public static readonly RatingValueHandler Default = new RatingValueHandler();
+			public override RatingValue Parse(object value)
+			{
+				if (value is Int32)
+					return new RatingValue() { Value = (Int32)value };
+
+				throw new FormatException("Invalid conversion to RatingValue");
+			}
+
+			public override void SetValue(System.Data.IDbDataParameter parameter, RatingValue value)
+			{
+				// ... null, range checks etc ...
+				parameter.DbType = System.Data.DbType.Int32;
+				parameter.Value = value.Value;
+			}
+		}
+		public class RatingValue
+		{
+			public Int32 Value { get; set; }
+			// ... some other properties etc ...
+		}
+
+		public class MyResult
+		{
+			public String CategoryName { get; set; }
+			public RatingValue CategoryRating { get; set; }
+		}
+
+		[Test]
+		public async Task SO24740733_TestCustomValueHandlerAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				SqlChic.SqlMapper.AddTypeHandler(RatingValueHandler.Default);
+				var foo = await connection.Query<MyResult>("SELECT 'Foo' AS CategoryName, 200 AS CategoryRating").SingleAsync();
+
+				foo.CategoryName.IsEqualTo("Foo");
+				foo.CategoryRating.Value.IsEqualTo(200);
+			}
+		}
+
+		[Test]
+		public async Task SO24740733_TestCustomValueSingleColumnAsync()
+		{
+			using (var connection = GetOpenConnection())
+			{
+				SqlChic.SqlMapper.AddTypeHandler(RatingValueHandler.Default);
+				var foo = await connection.Query<RatingValue>("SELECT 200 AS CategoryRating").SingleAsync();
+
+				foo.Value.IsEqualTo(200);
+			}
+		}
+
 
 #if POSTGRESQL
 

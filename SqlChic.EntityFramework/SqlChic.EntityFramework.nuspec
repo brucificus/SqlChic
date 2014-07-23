@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+	<metadata schemaVersion="2">
+		<id>SqlChic.EntityFramework</id>
+		<version>0.1</version>
+		<title>SqlChic entity framework type handlers</title>
+		<authors>Marc Gravell,Bruce Markham</authors>
+		<owners>Bruce Markham</owners>
+		<licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
+		<projectUrl>https://github.com/illuminus86/SqlChic</projectUrl>
+		<requireLicenseAcceptance>false</requireLicenseAcceptance>
+		<description>Extension handlers for entity framework</description>
+		<summary>Adds support for DbGeography, etc</summary>
+		<tags>orm sql micro-orm dapper async sqlchic spatial</tags>
+		<dependencies>
+			<dependency id="EntityFramework" version="6.1.1" />
+			<dependency id="SqlChic" version="1.26" />
+		</dependencies>
+		<frameworkAssemblies>
+			<frameworkAssembly assemblyName="System.Core"/>
+			<frameworkAssembly assemblyName="System"/>
+			<frameworkAssembly assemblyName="System.Data"/>
+			<frameworkAssembly assemblyName="Microsoft.CSharp" targetFramework=".NETFramework4.0-Client, .NETFramework4.0" />
+		</frameworkAssemblies>
+		<releaseNotes>
+		</releaseNotes>
+	</metadata>
+	<files>
+		<file src="bin\Release\SqlChic.EntityFramework.dll" target="lib\net45" />
+		<file src="bin\Release\SqlChic.EntityFramework.pdb" target="lib\net45" />
+		<file src="bin\Release\SqlChic.EntityFramework.xml" target="lib\net45" />
+	</files>
+</package>
